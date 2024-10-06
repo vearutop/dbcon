@@ -1,50 +1,57 @@
-# go-template
+# dbcon
 
-[![Build Status](https://github.com/bool64/go-template/workflows/test-unit/badge.svg)](https://github.com/bool64/go-template/actions?query=branch%3Amaster+workflow%3Atest-unit)
-[![Coverage Status](https://codecov.io/gh/bool64/go-template/branch/master/graph/badge.svg)](https://codecov.io/gh/bool64/go-template)
-[![GoDevDoc](https://img.shields.io/badge/dev-doc-00ADD8?logo=go)](https://pkg.go.dev/github.com/bool64/go-template)
-[![Time Tracker](https://wakatime.com/badge/github/bool64/go-template.svg)](https://wakatime.com/badge/github/bool64/go-template)
-![Code lines](https://sloc.xyz/github/bool64/go-template/?category=code)
-![Comments](https://sloc.xyz/github/bool64/go-template/?category=comments)
+[![Build Status](https://github.com/vearutop/dbcon/workflows/test-unit/badge.svg)](https://github.com/vearutop/dbcon/actions?query=branch%3Amaster+workflow%3Atest-unit)
+[![Coverage Status](https://codecov.io/gh/vearutop/dbcon/branch/master/graph/badge.svg)](https://codecov.io/gh/vearutop/dbcon)
+[![GoDevDoc](https://img.shields.io/badge/dev-doc-00ADD8?logo=go)](https://pkg.go.dev/github.com/vearutop/dbcon)
+[![Time Tracker](https://wakatime.com/badge/github/vearutop/dbcon.svg)](https://wakatime.com/badge/github/vearutop/dbcon)
+![Code lines](https://sloc.xyz/github/vearutop/dbcon/?category=code)
+![Comments](https://sloc.xyz/github/vearutop/dbcon/?category=comments)
 
-<!--- TODO Update README.md -->
-
-Project template with GitHub actions for Go.
+Web-based SQL console to SQLite, MySQL and Postgres.
 
 ## Install
 
 ```
-go install github.com/bool64/go-template@latest
-$(go env GOPATH)/bin/go-template --help
+go install github.com/vearutop/dbcon@latest
+$(go env GOPATH)/bin/dbcon --help
 ```
 
-Or download binary from [releases](https://github.com/bool64/go-template/releases).
+Or download binary from [releases](https://github.com/vearutop/dbcon/releases).
 
 ### Linux AMD64
 
 ```
-wget https://github.com/bool64/go-template/releases/latest/download/linux_amd64.tar.gz && tar xf linux_amd64.tar.gz && rm linux_amd64.tar.gz
-./go-template -version
+wget https://github.com/vearutop/dbcon/releases/latest/download/linux_amd64.tar.gz && tar xf linux_amd64.tar.gz && rm linux_amd64.tar.gz
+./dbcon -version
 ```
 
 ### Macos Intel
 
 ```
-wget https://github.com/bool64/go-template/releases/latest/download/darwin_amd64.tar.gz && tar xf darwin_amd64.tar.gz && rm darwin_amd64.tar.gz
-codesign -s - ./go-template
-./go-template -version
+wget https://github.com/vearutop/dbcon/releases/latest/download/darwin_amd64.tar.gz && tar xf darwin_amd64.tar.gz && rm darwin_amd64.tar.gz
+codesign -s - ./dbcon
+./dbcon -version
 ```
 
 ### Macos Apple Silicon (M1, etc...)
 
 ```
-wget https://github.com/bool64/go-template/releases/latest/download/darwin_arm64.tar.gz && tar xf darwin_arm64.tar.gz && rm darwin_arm64.tar.gz
-codesign -s - ./go-template
-./go-template -version
+wget https://github.com/vearutop/dbcon/releases/latest/download/darwin_arm64.tar.gz && tar xf darwin_arm64.tar.gz && rm darwin_arm64.tar.gz
+codesign -s - ./dbcon
+./dbcon -version
 ```
 
 
 ## Usage
 
-Create a new repository from this template, check out it and run `./run_me.sh` to replace template name with name of
-your repository.
+```
+Usage of dbcon:
+dbcon [OPTIONS] DB...
+        DB can be a path to SQLite file, or a URL with mysql:// or postgres:// scheme. Examples:
+                postgres://user:password@localhost/dbname?sslmode=disable
+                mysql://user:password@localhost/dbname
+                sqlite:///my.db
+                my.sqlite
+  -listen string
+        listen address, port 0 picks a free random port (default "127.0.0.1:0")
+```
