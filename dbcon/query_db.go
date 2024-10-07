@@ -12,8 +12,8 @@ import (
 )
 
 type dbQuery struct {
-	Instance  instance `json:"instance" title:"DB instance"`
-	Statement string   `json:"statement" formType:"textarea" title:"Statement" description:"SQL statement to execute."`
+	Instance  instance `json:"instance" title:"DB Instance"`
+	Statement string   `json:"statement" formType:"textarea" title:"SQL Statements" description:"SQL statements to execute."`
 }
 
 type instance string

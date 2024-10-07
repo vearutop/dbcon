@@ -76,7 +76,7 @@ func DBConsole(deps Deps, prefix string) usecase.Interactor {
 
 		return deps.SchemaRepository().Render(out.ResponseWriter(), p,
 			jsonform.Form{
-				Title:             "Query SQL",
+				Title:             "DB Console",
 				SubmitURL:         prefix + "query-db",
 				SubmitMethod:      http.MethodPost,
 				SuccessStatus:     http.StatusOK,

@@ -27,7 +27,7 @@ function render() {
  * @param {Result} result
  */
 function renderResult(result) {
-    var res = '<h4>' + result.statement + '</h4>'
+    var res = '<pre>' + result.statement + '</pre>'
 
     if (result.error) {
         res += '<p>' + result.error + '</p>';
@@ -35,7 +35,7 @@ function renderResult(result) {
         return res
     }
 
-    res += '<a href="/query-db.csv?instance=' + result.instance + '&statement=' + encodeURIComponent(result.statement) + '" style="margin-bottom: 10px" class="btn btn-primary" target="_blank">Download CSV</a> <span id="num-rows">Rows: ' + result.values.length + ', elapsed: ' + result.elapsed + '</span>\n'
+    res += '<a href="/query-db.csv?instance=' + encodeURIComponent(result.instance) + '&statement=' + encodeURIComponent(result.statement) + '" style="margin-bottom: 10px" class="btn btn-primary" target="_blank">Download CSV</a> <span id="num-rows">Rows: ' + result.values.length + ', elapsed: ' + result.elapsed + '</span>\n'
 
     res += '<table class="pure-table"><thead><tr>';
     for (k in result.columns) {
@@ -56,11 +56,17 @@ function renderResult(result) {
         }
 
         for (var k in item) {
-            res += '<td>' + item[k] + '</td>'
+            var v = item[k]
+
+            if (v && (v.indexOf("\n") !== -1 || v.indexOf("\t") !== -1)) {
+                v = '<pre>' + v + '</pre>'
+            }
+
+            res += '<td>' + v + '</td>'
         }
         res += '</tr>'
     }
-    res += "</tbody></table>"
+    res += "</tbody></table><hr/>"
 
     return res
 }
