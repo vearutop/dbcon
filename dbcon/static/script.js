@@ -12,6 +12,14 @@ function render() {
     };
 }
 
+function getDarkColor() {
+    var color = '#';
+    for (var i = 0; i < 6; i++) {
+        color += Math.floor(Math.random() * 12).toString(16);
+    }
+    return color;
+}
+
 /**
  * @typedef Result
  * @type {Object}
@@ -19,56 +27,120 @@ function render() {
  * @property {String} error - Error message.
  * @property {String} instance - DB instance name.
  * @property {String} elapsed - Time spent for a query.
- * @property {Array<String>} columns - Application context.
- * @property {Array<Array<*>>} values - Error message.
+ * @property {Array<String>} columns - List of columns.
+ * @property {Array<Array<*>>} values - Data.
  */
 
 /**
  * @param {Result} result
+ * @param {Number} idx
  */
-function renderResult(result) {
-    var res = '<pre>' + result.statement + '</pre>'
+function renderResult(result, idx) {
+    let res = '<pre>' + result.statement + '</pre>'
 
     if (result.error) {
         res += '<p>' + result.error + '</p>';
 
-        return res
+        $('#query-results').append('<div>' + res + '</div>')
+        return
     }
 
     res += '<a href="/query-db.csv?instance=' + encodeURIComponent(result.instance) + '&statement=' + encodeURIComponent(result.statement) + '" style="margin-bottom: 10px" class="btn btn-primary" target="_blank">Download CSV</a> <span id="num-rows">Rows: ' + result.values.length + ', elapsed: ' + result.elapsed + '</span>\n'
 
-    res += '<table class="pure-table"><thead><tr>';
-    for (k in result.columns) {
-        res += '<th>' + result.columns[k] + '</th>'
-    }
-    res += "</tr></thead>\n"
+    let uplot_opts = null;
+    let uplot_data = null;
+    if (result.statement.includes("-- plot")) {
+        res += '<div id="plot-' + idx + '"></div>'
 
-    res += "<tbody>"
-    var odd = true
-    for (var i in result.values) {
-        var item = result.values[i]
-        if (odd) {
-            res += '<tr class="pure-table-odd">'
-            odd = false
-        } else {
-            res += '<tr>'
-            odd = true
+        uplot_opts = {
+            width: document.getElementById("query-results").clientWidth,
+            height: 300,
+            // title: "Area Fill",
+            tzDate: ts => uPlot.tzDate(new Date(ts * 1e3), 'Etc/UTC'),
+            scales: {
+                x: {
+                    time: false,
+                },
+            },
+            series: []
+        };
+
+        if (result.statement.includes('-- plot:time')) {
+            uplot_opts.scales.x.time = true;
         }
 
-        for (var k in item) {
-            var v = item[k]
+        uplot_data = [];
+        for (let i = 0; i < result.columns.length; i++) {
+            uplot_data.push([]) // Separate vector for each column (X + multiple Y).
 
-            if (v && (v.indexOf("\n") !== -1 || v.indexOf("\t") !== -1)) {
-                v = '<pre>' + v + '</pre>'
+            if (i === 0) {
+                uplot_opts.series.push({
+                    label: result.columns[i],
+                })
+            } else {
+                uplot_opts.series.push({
+                    stroke: getDarkColor(),
+                    label: result.columns[i],
+                })
+            }
+        }
+
+        // Sorting data by first column (X axis) ascending.
+        let sortedValues = result.values.sort(function (a,b) {
+            return a[0] - b[0]
+        });
+
+        // Transposing results from being an array of rows to array of columns.
+        for (let i in sortedValues) {
+            let item = sortedValues[i]
+
+            for (let j = 0; j < item.length; j++) {
+                uplot_data[j].push(parseFloat(item[j]))
+            }
+        }
+    }
+
+    if (!uplot_opts) {
+        res += '<table class="pure-table result"><thead><tr>';
+        for (k in result.columns) {
+            res += '<th>' + result.columns[k] + '</th>'
+        }
+        res += "</tr></thead>\n"
+
+        res += "<tbody>"
+        var odd = true
+        for (var i in result.values) {
+            var item = result.values[i]
+            if (odd) {
+                res += '<tr class="pure-table-odd">'
+                odd = false
+            } else {
+                res += '<tr>'
+                odd = true
             }
 
-            res += '<td>' + v + '</td>'
-        }
-        res += '</tr>'
-    }
-    res += "</tbody></table><hr/>"
+            for (var k in item) {
+                var v = item[k]
 
-    return res
+                if (v && (v.indexOf("\n") !== -1 || v.indexOf("\t") !== -1)) {
+                    v = '<pre>' + v + '</pre>'
+                }
+
+                res += '<td>' + v + '</td>'
+            }
+            res += '</tr>'
+        }
+        res += "</tbody></table><hr/>"
+    }
+
+    $('#query-results').append('<div>' + res + '</div>')
+
+    if (uplot_opts && uplot_data) {
+        console.log("Plotting to", document.getElementById("plot-" + idx))
+        console.log(uplot_opts)
+        console.log(uplot_data)
+        new uPlot(uplot_opts, uplot_data, document.getElementById("plot-" + idx));
+    }
 }
 
 /**
@@ -93,8 +165,7 @@ function onQuerySQLSuccess(x) {
     $('#query-results').html('')
 
     for (var i in a) {
-        var res = renderResult(a[i])
-        $('#query-results').append('<div>' + res + '</div>')
+        var res = renderResult(a[i], i)
 
     }
 
@@ -102,7 +173,7 @@ function onQuerySQLSuccess(x) {
         $.fn.fancyTable = fancyTable
     }
 
-    $('#query-results table').fancyTable({
+    $('#query-results table.result').fancyTable({
         sortable: true,
         searchable: true,
         pagination: false,
