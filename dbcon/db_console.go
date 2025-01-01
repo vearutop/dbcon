@@ -52,8 +52,10 @@ func DBConsole(deps Deps, prefix string) usecase.Interactor {
 		p.AppendHTMLHead = template.HTML(`
 <link rel="icon" href="` + prefix + `favicon.png" type="image/png"/>
 <script src="` + prefix + `jquery-3.7.1.slim.min.js"></script>
+<script src="` + prefix + `uPlot.iife.min.js"></script>
 <script src="` + prefix + `script.js"></script>
-<link rel="stylesheet" href="` + prefix + `/style.css">
+<link rel="stylesheet" href="` + prefix + `style.css">
+<link rel="stylesheet" href="` + prefix + `uPlot.min.css">
 `)
 		p.AppendHTML = `
 <div style="margin: 2em">

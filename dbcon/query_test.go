@@ -1,10 +1,10 @@
 package dbcon_test
 
 import (
+	"github.com/vearutop/dbcon/dbcon"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/vearutop/photo-blog/pkg/dbcon"
 )
 
 func TestSplitStatements(t *testing.T) {

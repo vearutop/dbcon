@@ -55,3 +55,13 @@ dbcon [OPTIONS] DB...
   -listen string
         listen address, port 0 picks a free random port (default "127.0.0.1:0")
 ```
+
+Multiple statements can be separated with `;`.
+
+If a statement has `-- plot` in comment, result is plotted on a chart.
+
+First column is used for X axis, remaining columns go to Y axis.
+
+X axis can be a UTC datetime if values are UNIX timestamp integers and statement has a comment `-- plot:time`.
+
+![Example](dbcon.png)
