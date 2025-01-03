@@ -2,6 +2,9 @@ package dbcon
 
 import "strings"
 
+// SplitStatements splits a string in multiple SQL statements separated by semicolon (';').
+//
+// Semicolons in comments and string literals are not treated as separators.
 func SplitStatements(s string) []string {
 	var (
 		quoteChars  = [...]int32{'"', '\'', '`'}
@@ -30,10 +33,11 @@ func SplitStatements(s string) []string {
 		if lineCommentStarted {
 			if c == '\n' {
 				lineCommentStarted = false
-				continue
-			} else {
+
 				continue
 			}
+
+			continue
 		}
 
 		if quoteOpened != 0 {
@@ -41,10 +45,12 @@ func SplitStatements(s string) []string {
 			if c == quoteOpened {
 				if prevQuot {
 					prevQuot = false
+
 					continue
 				}
 
 				prevQuot = true
+
 				continue
 			}
 
@@ -54,64 +60,68 @@ func SplitStatements(s string) []string {
 			}
 		}
 
-		if quoteOpened == 0 {
-			for _, q := range quoteChars {
-				if c == q {
-					quoteOpened = q
-				}
+		// quoteOpened is 0
+		for _, q := range quoteChars {
+			if c == q {
+				quoteOpened = q
 			}
+		}
 
-			if quoteOpened != 0 {
-				continue
-			}
+		if quoteOpened != 0 {
+			continue
+		}
 
-			// Might be a line comment.
-			if c == '-' {
-				if prevDash {
-					prevDash = false
-					lineCommentStarted = true
-					continue
-				}
-
-				prevDash = true
-			} else {
+		// Might be a line comment.
+		if c == '-' {
+			if prevDash {
 				prevDash = false
-			}
+				lineCommentStarted = true
 
-			if c == '/' {
-				if prevAsterisk && blockCommentStarted {
-					blockCommentStarted = false
-					prevAsterisk = false
-					continue
-				}
-
-				prevSlash = true
 				continue
 			}
 
-			if c == '*' {
-				if prevSlash && !blockCommentStarted {
-					blockCommentStarted = true
-					prevSlash = false
-					continue
-				}
+			prevDash = true
+		} else {
+			prevDash = false
+		}
 
-				prevAsterisk = true
+		if c == '/' {
+			if prevAsterisk && blockCommentStarted {
+				blockCommentStarted = false
+				prevAsterisk = false
+
 				continue
 			}
 
-			prevSlash = false
-			prevAsterisk = false
+			prevSlash = true
 
-			// Not in an enquoted string, so that's a statement separator.
-			if c == ';' {
-				st := strings.TrimSpace(s[prevStart:i])
-				if len(st) > 0 {
-					res = append(res, st)
-				}
+			continue
+		}
 
-				prevStart = i + 1
+		if c == '*' {
+			if prevSlash && !blockCommentStarted {
+				blockCommentStarted = true
+				prevSlash = false
+
+				continue
 			}
+
+			prevAsterisk = true
+
+			continue
+		}
+
+		prevSlash = false
+		prevAsterisk = false
+
+		// Not in an enquoted string, so that's a statement separator.
+		if c == ';' {
+			st := strings.TrimSpace(s[prevStart:i])
+			if len(st) > 0 {
+				res = append(res, st)
+			}
+
+			prevStart = i + 1
 		}
 	}
 

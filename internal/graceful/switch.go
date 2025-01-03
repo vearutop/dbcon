@@ -75,9 +75,9 @@ func NewSwitch(timeout time.Duration, options ...func(s *Switch)) *Switch {
 			if err != nil {
 				println(err.Error())
 				os.Exit(1)
-			} else {
-				os.Exit(0)
 			}
+
+			os.Exit(0)
 		}()
 	}
 
@@ -162,10 +162,12 @@ func (s *Switch) Shutdown() {
 
 	if !s.closed {
 		s.closed = true
+
 		close(s.sig)
 	}
 }
 
+// Wait blocks until shutdown.
 func (s *Switch) Wait() {
 	<-s.done
 }

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -33,13 +34,6 @@ func Main() { //nolint:funlen,cyclop
 
 	flag.StringVar(&listen, "listen", "127.0.0.1:0", "listen address, port 0 picks a free random port")
 
-	listener, err := net.Listen("tcp", listen)
-	if err != nil {
-		log.Println("failed to start server:", err.Error())
-
-		return
-	}
-
 	flag.Parse()
 
 	if flag.NArg() == 0 {
@@ -56,6 +50,13 @@ func Main() { //nolint:funlen,cyclop
 	}
 
 	sh := graceful.NewSwitch(time.Second)
+
+	listener, err := net.Listen("tcp", listen)
+	if err != nil {
+		log.Println("failed to start server:", err.Error())
+
+		return
+	}
 
 	instances := map[string]*sql.DB{}
 
@@ -128,7 +129,7 @@ func Main() { //nolint:funlen,cyclop
 	s.Docs("/docs", swgui.New)
 
 	// Start server.
-	srv := &http.Server{Addr: "localhost:8011", Handler: s, ReadHeaderTimeout: time.Second}
+	srv := &http.Server{Handler: s, ReadHeaderTimeout: time.Second}
 
 	sh.OnShutdown("http_server", func() {
 		if err := srv.Shutdown(context.Background()); err != nil {
@@ -142,15 +143,26 @@ func Main() { //nolint:funlen,cyclop
 		}
 	}()
 
-	log.Println("http://" + listener.Addr().String())
+	addr := listener.Addr().String()
 
-	if err := openBrowser("http://" + listener.Addr().String() + "/db.html"); err != nil {
+	if strings.HasPrefix(listen, ":") {
+		m, err := interfaces(false)
+		if err != nil {
+			log.Println("find network interfaces:", err)
+		} else {
+			for _, v := range m {
+				addr = v + listen
+			}
+		}
+	}
+
+	log.Println("http://" + addr)
+
+	if err := openBrowser("http://" + addr); err != nil && !strings.Contains(err.Error(), "executable file not found") {
 		log.Println("failed to open browser", err.Error())
 	}
 
 	sh.Wait()
-
-	println("bye!")
 }
 
 // openBrowser opens the specified URL in the default browser of the user.
@@ -173,4 +185,70 @@ func openBrowser(url string) error {
 	args = append(args, url)
 
 	return exec.Command(cmd, args...).Start() //nolint:gosec
+}
+
+// interfaces returns a `name:ip` map of the suitable interfaces found.
+func interfaces(listAll bool) ([]string, error) {
+	names := make([]string, 0)
+
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return names, err
+	}
+
+	re := regexp.MustCompile(`^(veth|br\-|docker|lo|EHC|XHC|bridge|gif|stf|p2p|awdl|utun|tun|tap)`)
+
+	for _, iface := range ifaces {
+		if !listAll && re.MatchString(iface.Name) {
+			continue
+		}
+
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+
+		ip, err := findIP(iface)
+		if err != nil {
+			continue
+		}
+
+		names = append(names, ip)
+	}
+
+	return names, nil
+}
+
+// FindIP returns the IP address of the passed interface, and an error.
+func findIP(iface net.Interface) (string, error) {
+	var ip string
+
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return "", err
+	}
+
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok {
+			if ipnet.IP.IsLinkLocalUnicast() {
+				continue
+			}
+
+			if ipnet.IP.To4() != nil {
+				ip = ipnet.IP.String()
+
+				continue
+			}
+			// Use IPv6 only if an IPv4 hasn't been found yet.
+			// This is eventually overwritten with an IPv4, if found (see above)
+			if ip == "" {
+				ip = "[" + ipnet.IP.String() + "]"
+			}
+		}
+	}
+
+	if ip == "" {
+		return "", errors.New("unable to find an IP for this interface")
+	}
+
+	return ip, nil
 }

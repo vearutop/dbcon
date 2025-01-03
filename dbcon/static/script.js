@@ -183,13 +183,13 @@ function onQuerySQLSuccess(x) {
 
 function onQuerySQLBeforeSubmit(values) {
     console.log("values", values)
-    $('#form-title-1').addClass("spinner")
+    $('#form-title-0').addClass("spinner")
 
     $('#query-result').html("<tr><td>Running query:</td></tr><tr><td>" + values.statement + "</td></tr>")
 }
 
 function onQuerySQLFinished() {
-    $('#form-title-1').removeClass("spinner")
+    $('#form-title-0').removeClass("spinner")
 }
 
 function fancyTable(options) {

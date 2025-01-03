@@ -17,7 +17,9 @@ var (
 	staticServer = statigz.FileServer(staticAssets, statigz.FSPrefix("static"))
 )
 
+// Mount instruments the router with handlers.
 func Mount(s *web.Service, prefix string, deps Deps) {
+	s.Get("/", DBConsole(deps, prefix))
 	s.Get("/db.html", DBConsole(deps, prefix))
 	s.Post("/query-db", DBQuery(deps))
 	s.Get("/query-db.csv", DBQueryCSV(deps))
