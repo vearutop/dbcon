@@ -6,21 +6,23 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"net/http"
+	"log"
 	"strconv"
 	"strings"
 
+	"github.com/swaggest/rest/response"
 	"github.com/swaggest/usecase"
 	"github.com/swaggest/usecase/status"
 )
 
+// DBQueryCSV returns query result as CSV.
 func DBQueryCSV(deps Deps) usecase.Interactor {
 	type request struct {
 		Instance  instance `query:"instance"`
 		Statement string   `query:"statement" formType:"textarea" title:"Statement" description:"SQL Statement to execute."`
 	}
 
-	u := usecase.NewInteractor(func(ctx context.Context, input request, output *usecase.OutputWithEmbeddedWriter) error {
+	u := usecase.NewInteractor(func(ctx context.Context, input request, output *response.EmbeddedSetter) error {
 		db := deps.DBInstances()[string(input.Instance)]
 
 		if db == nil {
@@ -32,17 +34,27 @@ func DBQueryCSV(deps Deps) usecase.Interactor {
 			return err
 		}
 
-		cols, _ := rows.Columns()
-		defer rows.Close()
+		cols, err := rows.Columns()
+		if err != nil {
+			return fmt.Errorf("query columns: %w", err)
+		}
 
-		rw := output.Writer.(http.ResponseWriter)
+		defer func() {
+			if err := rows.Close(); err != nil {
+				log.Println("failed to close rows:", err.Error())
+			}
+		}()
+
+		rw := output.ResponseWriter()
 		rw.Header().Set("Content-Type", "text/csv")
 		rw.Header().Set("Content-Disposition", "attachment; filename=\"data.csv\"")
 		rw.Header().Set("Content-Transfer-Encoding", "binary")
 
-		w := csv.NewWriter(output.Writer)
+		w := csv.NewWriter(rw)
 
-		_ = w.Write(cols)
+		if err := w.Write(cols); err != nil {
+			log.Println("csv write failed:", err.Error())
+		}
 
 		for rows.Next() {
 			columns := make([]interface{}, len(cols))
@@ -73,11 +85,13 @@ func DBQueryCSV(deps Deps) usecase.Interactor {
 				values = append(values, strings.Trim(string(j), `"`))
 			}
 
-			_ = w.Write(values)
+			if err := w.Write(values); err != nil {
+				log.Println("csv write failed:", err.Error())
+			}
 		}
 
-		if rows.Err() != nil {
-			println("rows error", rows.Err().Error())
+		if err := rows.Err(); err != nil {
+			log.Println("rows error:", err.Error())
 		}
 
 		w.Flush()

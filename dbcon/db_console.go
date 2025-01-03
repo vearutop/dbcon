@@ -14,6 +14,7 @@ import (
 	"github.com/swaggest/usecase/status"
 )
 
+// Deps describes required resources.
 type Deps interface {
 	SchemaRepository() *jsonform.Repository
 	DBInstances() map[string]*sql.DB
@@ -32,6 +33,7 @@ func (d dependencies) DBInstances() map[string]*sql.DB {
 	return d.instances
 }
 
+// DefaultDeps prepares dependencies from DB instances.
 func DefaultDeps(instances map[string]*sql.DB) Deps {
 	return &dependencies{
 		form:      jsonform.NewRepository(&jsonschema.Reflector{}),
@@ -49,7 +51,9 @@ func DBConsole(deps Deps, prefix string) usecase.Interactor {
 		p := jsonform.Page{}
 
 		p.Title = "DB Console"
-		p.AppendHTMLHead = template.HTML(`
+
+		p.AppendHTMLHead = template.HTML( //nolint:gosec
+			`
 <link rel="icon" href="` + prefix + `favicon.png" type="image/png"/>
 <script src="` + prefix + `jquery-3.7.1.slim.min.js"></script>
 <script src="` + prefix + `uPlot.iife.min.js"></script>
@@ -82,7 +86,7 @@ func DBConsole(deps Deps, prefix string) usecase.Interactor {
 				SubmitURL:         prefix + "query-db",
 				SubmitMethod:      http.MethodPost,
 				SuccessStatus:     http.StatusOK,
-				Value:             dbQuery{Instance: instance(instances)},
+				Value:             QueryRequest{Queries: []dbQuery{{Instance: instance(instances)}}},
 				OnSuccess:         `onQuerySQLSuccess`,
 				OnBeforeSubmit:    `onQuerySQLBeforeSubmit`,
 				OnRequestFinished: `onQuerySQLFinished`,

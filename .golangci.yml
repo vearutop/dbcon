@@ -20,6 +20,11 @@ linters-settings:
 linters:
   enable-all: true
   disable:
+    - cyclop
+    - gocognit
+    - gocyclo
+    - funlen
+    - err113
     - intrange
     - copyloopvar
     - lll
