@@ -40,7 +40,7 @@ type Result struct {
 	Columns   []string        `json:"columns"`
 	Values    [][]interface{} `json:"values"`
 	Elapsed   string          `json:"elapsed"`
-	Error     string          `json:"error"`
+	Error     string          `json:"error,omitempty"`
 	Instance  string          `json:"instance"`
 }
 

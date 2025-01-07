@@ -47,6 +47,8 @@ func DBConsole(deps Deps, prefix string) usecase.Interactor {
 		prefix += "/"
 	}
 
+	// PRAGMA table_info(visitor);
+
 	u := usecase.NewInteractor(func(ctx context.Context, in struct{}, out *response.EmbeddedSetter) error {
 		p := jsonform.Page{}
 
@@ -55,18 +57,17 @@ func DBConsole(deps Deps, prefix string) usecase.Interactor {
 		p.AppendHTMLHead = template.HTML( //nolint:gosec
 			`
 <link rel="icon" href="` + prefix + `favicon.png" type="image/png"/>
-<script src="` + prefix + `jquery-3.7.1.slim.min.js"></script>
 <script src="` + prefix + `uPlot.iife.min.js"></script>
 <script src="` + prefix + `script.js"></script>
+<script src="` + prefix + `script_extra.js"></script>
 <link rel="stylesheet" href="` + prefix + `style.css">
 <link rel="stylesheet" href="` + prefix + `uPlot.min.css">
 `)
 		p.AppendHTML = `
 <div style="margin: 2em">
 
-<a href="#" style="display:none;margin-bottom: 10px" id="dl-csv" class="btn btn-primary" target="_blank">Download CSV</a> <span id="num-rows"></span>
+<div class="btn btn-primary" onclick="downloadHTMLReport()">Download HTML report</div>
 <div id="query-results">
-
 </div>
 </div>
 `
@@ -85,6 +86,7 @@ func DBConsole(deps Deps, prefix string) usecase.Interactor {
 				Title:             "DB Console",
 				SubmitURL:         prefix + "query-db",
 				SubmitMethod:      http.MethodPost,
+				SubmitText:        "Query",
 				SuccessStatus:     http.StatusOK,
 				Value:             QueryRequest{Queries: []dbQuery{{Instance: instance(instances)}}},
 				OnSuccess:         `onQuerySQLSuccess`,

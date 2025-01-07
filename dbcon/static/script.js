@@ -1,17 +1,3 @@
-function render() {
-    var props = arguments;
-    return function (tok, i) {
-        if (i % 2) {
-            for (var a = 0; a < props.length; a++) {
-                if (typeof props[a][tok] !== "undefined") {
-                    return props[a][tok];
-                }
-            }
-        }
-        return tok;
-    };
-}
-
 function getDarkColor() {
     var color = '#';
     for (var i = 0; i < 6; i++) {
@@ -45,7 +31,7 @@ function renderResult(result, idx) {
         return
     }
 
-    res += '<a href="/query-db.csv?instance=' + encodeURIComponent(result.instance) + '&statement=' + encodeURIComponent(result.statement) + '" style="margin-bottom: 10px" class="btn btn-primary" target="_blank">Download CSV</a> <span id="num-rows">Rows: ' + result.values.length + ', elapsed: ' + result.elapsed + '</span>\n'
+    res += '<a href="/query-db.csv?instance=' + encodeURIComponent(result.instance) + '&statement=' + encodeURIComponent(result.statement) + '" style="margin-bottom: 10px" class="btn btn-primary" target="_blank">Download CSV</a> <span>Rows: ' + result.values.length + ', elapsed: ' + result.elapsed + '</span>\n'
 
     let uplot_opts = null;
     let uplot_data = null;
@@ -86,7 +72,7 @@ function renderResult(result, idx) {
         }
 
         // Sorting data by first column (X axis) ascending.
-        let sortedValues = result.values.sort(function (a,b) {
+        let sortedValues = result.values.sort(function (a, b) {
             return a[0] - b[0]
         });
 
@@ -144,29 +130,20 @@ function renderResult(result, idx) {
 }
 
 /**
- * @param {XMLHttpRequest} x
+ * @type {Array<Result>}
  */
-function onQuerySQLSuccess(x) {
-    console.log(x.responseText)
-    $('#form-title-1').removeClass("spinner")
+var results = []
 
-
-    /**
-     * @type {Array<Result>}
-     */
-    var a = JSON.parse(x.responseText)
-    console.log(a)
-
-    if (a === null || a.length === 0) {
+function renderResults() {
+    if (!results) {
         $('#query-results').html("<tr><td>No data.</td></tr>")
         return
     }
 
     $('#query-results').html('')
 
-    for (var i in a) {
-        var res = renderResult(a[i], i)
-
+    for (var i in results) {
+        renderResult(results[i], i)
     }
 
     if (!$.fn.fancyTable) {
@@ -179,17 +156,6 @@ function onQuerySQLSuccess(x) {
         pagination: false,
         globalSearch: true
     });
-}
-
-function onQuerySQLBeforeSubmit(values) {
-    console.log("values", values)
-    $('#form-title-0').addClass("spinner")
-
-    $('#query-result').html("<tr><td>Running query:</td></tr><tr><td>" + values.statement + "</td></tr>")
-}
-
-function onQuerySQLFinished() {
-    $('#form-title-0').removeClass("spinner")
 }
 
 function fancyTable(options) {
