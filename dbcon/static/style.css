@@ -18,3 +18,30 @@
 #query-result td {
     white-space: nowrap;
 }
+
+
+
+
+.chart-container {
+    margin: 20px;
+}
+
+.slice {
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.slice:hover {
+    opacity: 0.8;
+}
+
+.legend-item rect {
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+}
+
+.legend-item text {
+    font-size: 12px;
+    dominant-baseline: middle;
+}

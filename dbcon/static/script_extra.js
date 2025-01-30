@@ -53,7 +53,7 @@ function downloadHTMLReport() {
     var rtemp = results
 
     var js = ""
-    js += get("jquery-3.7.1.min.js") + "\n"
+    js += get("/json-form/jquery-3.7.1.min.js") + "\n"
     js += get("/uPlot.iife.min.js") + "\n"
     js += get("/script.js") + "\n"
 
@@ -65,6 +65,7 @@ function downloadHTMLReport() {
         '<h1>Report</h1>' +
         '<div id="query-results"></div>\n' +
         '<script>\n' +
+        'isPortableReport = true;\n' +
         'results = ' +rr+';\n' +
         'renderResults();\n' +
         '</script>' +
@@ -97,21 +98,28 @@ function download_file(name, contents, mime_type) {
  * @param {XMLHttpRequest} x
  */
 function onQuerySQLSuccess(x) {
-    console.log(x.responseText)
+    // console.log(x.responseText)
 
-    /**
-     * @type {Array<Result>}
-     */
-    results = JSON.parse(x.responseText)
-    console.log(results)
+    var response = JSON.parse(x.responseText)
+
+    results = response.results
+
+    var url = "?form=" + response.form
+    // console.log(url)
+
+    $("#link-form").attr("href", url).show()
+    $("#download-report").show()
+
+    // console.log(results)
 
     renderResults();
-
-
 }
 
 function onQuerySQLBeforeSubmit(values) {
-    console.log("values", values)
+    $("#link-form").hide()
+    $("#download-report").hide()
+
+
     $('#form-title-0').addClass("spinner")
 
     $('#query-result').html("<tr><td>Running query:</td></tr><tr><td>" + values.statement + "</td></tr>")

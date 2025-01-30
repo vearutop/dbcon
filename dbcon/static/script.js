@@ -1,7 +1,22 @@
+function splitmix32(a) {
+    return function() {
+        a |= 0;
+        a = a + 0x9e3779b9 | 0;
+        let t = a ^ a >>> 16;
+        t = Math.imul(t, 0x21f0aaad);
+        t = t ^ t >>> 15;
+        t = Math.imul(t, 0x735a2d97);
+        return ((t = t ^ t >>> 15) >>> 0) / 4294967296;
+    }
+}
+
+// Deterministic random number generator.
+const prng = splitmix32(12345)
+
 function getDarkColor() {
     var color = '#';
     for (var i = 0; i < 6; i++) {
-        color += Math.floor(Math.random() * 12).toString(16);
+        color += Math.floor(2 + prng() * 11).toString(16);
     }
     return color;
 }
@@ -31,10 +46,17 @@ function renderResult(result, idx) {
         return
     }
 
-    res += '<a href="/query-db.csv?instance=' + encodeURIComponent(result.instance) + '&statement=' + encodeURIComponent(result.statement) + '" style="margin-bottom: 10px" class="btn btn-primary" target="_blank">Download CSV</a> <span>Rows: ' + result.values.length + ', elapsed: ' + result.elapsed + '</span>\n'
+    if (result.values) {
+        if (!isPortableReport) {
+            res += '<a href="/query-db.csv?instance=' + encodeURIComponent(result.instance) + '&statement=' + encodeURIComponent(result.statement) + '" style="margin-bottom: 10px" class="btn btn-info" target="_blank">Download CSV</a> '
+        }
+        res += '<span>Rows: ' + result.values.length + ', elapsed: ' + result.elapsed + '</span>\n'
+    }
 
     let uplot_opts = null;
     let uplot_data = null;
+    let pie_data = null;
+
     if (result.statement.includes("-- plot")) {
         res += '<div id="plot-' + idx + '"></div>'
 
@@ -76,7 +98,6 @@ function renderResult(result, idx) {
             return a[0] - b[0]
         });
 
-        // Transposing results from being an array of rows to array of columns.
         for (let i in sortedValues) {
             let item = sortedValues[i]
 
@@ -86,7 +107,27 @@ function renderResult(result, idx) {
         }
     }
 
-    if (!uplot_opts) {
+    if (result.statement.includes("-- pie")) {
+        res += '<div id="pie-' + idx + '"></div>'
+
+        // Sorting data by first column (count) descending.
+        let sortedValues = result.values.sort(function (a, b) {
+            return b[0] - a[0]
+        });
+
+        pie_data = [];
+
+        // Transposing results from being an array of rows to array of columns.
+        for (let i in sortedValues) {
+            let item = sortedValues[i]
+
+            pie_data.push(
+                { label: item[1], value: parseFloat(item[0]), color: getDarkColor() }
+            )
+        }
+    }
+
+    if (!uplot_opts && !pie_data) {
         res += '<table class="pure-table result"><thead><tr>';
         for (k in result.columns) {
             res += '<th>' + result.columns[k] + '</th>'
@@ -108,7 +149,7 @@ function renderResult(result, idx) {
             for (var k in item) {
                 var v = item[k]
 
-                if (v && (v.indexOf("\n") !== -1 || v.indexOf("\t") !== -1)) {
+                if (v && typeof v === 'string' && (v.indexOf("\n") !== -1 || v.indexOf("\t") !== -1)) {
                     v = '<pre>' + v + '</pre>'
                 }
 
@@ -122,10 +163,20 @@ function renderResult(result, idx) {
     $('#query-results').append('<div>' + res + '</div>')
 
     if (uplot_opts && uplot_data) {
-        console.log("Plotting to", document.getElementById("plot-" + idx))
-        console.log(uplot_opts)
-        console.log(uplot_data)
+        // console.log("Plotting to", document.getElementById("plot-" + idx))
+        // console.log(uplot_opts)
+        // console.log(uplot_data)
         new uPlot(uplot_opts, uplot_data, document.getElementById("plot-" + idx));
+    }
+
+    if (pie_data) {
+        var m = result.statement.match(/pie_total=(\d+)/)
+        var total = 0
+        if (m && m[1]) {
+            total = parseFloat(m[1])
+        }
+        // console.log("Plotting pie", JSON.stringify(pie_data), total, document.getElementById("pie-" + idx))
+        drawPieChart(pie_data, total, document.getElementById("pie-" + idx))
     }
 }
 
@@ -133,6 +184,7 @@ function renderResult(result, idx) {
  * @type {Array<Result>}
  */
 var results = []
+var isPortableReport = false;
 
 function renderResults() {
     if (!results) {
@@ -156,6 +208,91 @@ function renderResults() {
         pagination: false,
         globalSearch: true
     });
+}
+
+// drawPieChart renders a pie chart, courtesy of deepseek-r1:32b with minor changes.
+function drawPieChart(data, total, container) {
+    // Set chart dimensions
+    const width = 500;
+    const height = 500;
+    const margin = 0;
+    const chartWidth = width - 2 * margin;
+    const chartHeight = height - 2 * margin;
+
+    // Create SVG element
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute('width', document.getElementById("query-results").clientWidth);
+    svg.setAttribute('height', height);
+    container.appendChild(svg);
+
+    // Calculate totals
+    if (!total) {
+        total = data.reduce((sum, item) => sum + item.value, 0);
+    }
+
+    // Create pie chart slices
+    let currentAngle = 0;
+    const centerX = margin + chartWidth / 2;
+    const centerY = margin + chartHeight / 2;
+
+    const radius = Math.min(chartWidth - margin * 2, chartHeight - margin * 2) / 2;
+
+    data.forEach(item => {
+        const percent = (item.value / total) * 100;
+        const angle = (percent / 100) * 2 * Math.PI;
+
+        // Create slice path
+        const slice = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        slice.classList.add("slice");
+
+        const d = [
+            `M ${centerX} ${centerY}`,
+            `L ${centerX + radius * Math.cos(currentAngle)} ${centerY + radius * Math.sin(currentAngle)}`,
+            `A ${radius} ${radius} 0 ${(angle > Math.PI ? 1 : 0)} 1 ${centerX + radius * Math.cos(currentAngle + angle)} ${centerY + radius *
+            Math.sin(currentAngle + angle)}`,
+            `L ${centerX} ${centerY}`
+        ].join(' ');
+
+        slice.setAttributeNS(null, 'd', d);
+        slice.style.fill = item.color;
+
+        // Add title (tooltip)
+        const tooltip = document.createElementNS("http://www.w3.org/2000/svg", "title");
+        tooltip.textContent = `${item.label}: ${item.value} (${percent.toFixed(1)}%)`;
+        slice.appendChild(tooltip);
+
+        svg.appendChild(slice);
+
+        currentAngle += angle;
+    });
+
+    // Add legend
+    const legendG = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    legendG.setAttribute('transform', `translate(520,${margin})`);
+
+    data.forEach((item, index) => {
+        const legendItem = document.createElementNS("http://www.w3.org/2000/svg", 'g');
+        legendItem.classList.add('legend-item');
+
+        // Legend color swatch
+        const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        rect.setAttributeNS(null, 'x', 0);
+        rect.setAttributeNS(null, 'y', index * 20);
+        rect.style.fill = item.color;
+
+        // Legend text
+        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.setAttributeNS(null, 'x', 24);
+        text.setAttributeNS(null, 'y', index * 20 + 12);
+        const percent = (item.value / total) * 100;
+        text.textContent = `${item.label}: ${item.value} (${percent.toFixed(1)}%)`;
+
+        legendItem.appendChild(rect);
+        legendItem.appendChild(text);
+        legendG.appendChild(legendItem);
+    });
+
+    svg.appendChild(legendG);
 }
 
 function fancyTable(options) {

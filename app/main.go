@@ -20,6 +20,7 @@ import (
 	_ "github.com/go-sql-driver/mysql" // DB driver.
 	_ "github.com/lib/pq"              // DB driver.
 	"github.com/swaggest/openapi-go/openapi31"
+	"github.com/swaggest/rest/response/gzip"
 	"github.com/swaggest/rest/web"
 	swgui "github.com/swaggest/swgui/v5cdn"
 	"github.com/swaggest/usecase"
@@ -30,9 +31,13 @@ import (
 
 // Main is the main app function.
 func Main() { //nolint:funlen,cyclop
-	var listen string
+	var (
+		listen      string
+		skipBrowser bool
+	)
 
 	flag.StringVar(&listen, "listen", "127.0.0.1:0", "listen address, port 0 picks a free random port")
+	flag.BoolVar(&skipBrowser, "s", false, "skip browser opening")
 
 	flag.Parse()
 
@@ -117,6 +122,8 @@ func Main() { //nolint:funlen,cyclop
 	s.OpenAPISchema().SetDescription("Database console REST API.")
 	s.OpenAPISchema().SetVersion(version.Module("github.com/vearutop/dbcon").Version)
 
+	s.Wrap(gzip.Middleware)
+
 	s.Get("/exit", usecase.NewInteractor(func(ctx context.Context, input struct{}, output *struct{}) error {
 		sh.Shutdown()
 
@@ -158,8 +165,10 @@ func Main() { //nolint:funlen,cyclop
 
 	log.Println("http://" + addr)
 
-	if err := openBrowser("http://" + addr); err != nil && !strings.Contains(err.Error(), "executable file not found") {
-		log.Println("failed to open browser", err.Error())
+	if !skipBrowser {
+		if err := openBrowser("http://" + addr); err != nil && !strings.Contains(err.Error(), "executable file not found") {
+			log.Println("failed to open browser", err.Error())
+		}
 	}
 
 	sh.Wait()
