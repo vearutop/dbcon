@@ -104,7 +104,7 @@ function onQuerySQLSuccess(x) {
 
     results = response.results
 
-    var url = "?form=" + response.form
+    var url = "?form=" + encodeURIComponent(response.form)
     // console.log(url)
 
     $("#link-form").attr("href", url).show()
