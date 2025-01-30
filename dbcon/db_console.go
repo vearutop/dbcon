@@ -1,12 +1,17 @@
 package dbcon
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
 	"html/template"
+	"io"
 	"net/http"
 	"strings"
 
+	"github.com/andybalholm/brotli"
 	jsonform "github.com/swaggest/jsonform-go"
 	"github.com/swaggest/jsonschema-go"
 	"github.com/swaggest/rest/response"
@@ -41,13 +46,49 @@ func DefaultDeps(instances map[string]*sql.DB) Deps {
 	}
 }
 
+func decodeForm(b string) (qr QueryRequest, err error) {
+	if len(b) == 0 {
+		return qr, nil
+	}
+
+	var j []byte
+
+	if b[0] != '{' {
+		j, err = base64.StdEncoding.DecodeString(b)
+		if err != nil {
+			return qr, err
+		}
+
+		r := brotli.NewReader(bytes.NewReader(j))
+
+		j, err = io.ReadAll(r)
+		if err != nil {
+			return qr, err
+		}
+	} else {
+		j = []byte(b)
+	}
+
+	if err := json.Unmarshal(j, &qr); err != nil {
+		return qr, err
+	}
+
+	return qr, nil
+}
+
 // DBConsole creates use case interactor to show DB console.
 func DBConsole(deps Deps, prefix string) usecase.Interactor {
 	if !strings.HasSuffix(prefix, "/") {
 		prefix += "/"
 	}
 
-	u := usecase.NewInteractor(func(ctx context.Context, in struct{}, out *response.EmbeddedSetter) error {
+	// PRAGMA table_info(visitor);
+
+	type req struct {
+		Form string `query:"form"`
+	}
+
+	u := usecase.NewInteractor(func(ctx context.Context, in req, out *response.EmbeddedSetter) error {
 		p := jsonform.Page{}
 
 		p.Title = "DB Console"
@@ -55,18 +96,18 @@ func DBConsole(deps Deps, prefix string) usecase.Interactor {
 		p.AppendHTMLHead = template.HTML( //nolint:gosec
 			`
 <link rel="icon" href="` + prefix + `favicon.png" type="image/png"/>
-<script src="` + prefix + `jquery-3.7.1.slim.min.js"></script>
 <script src="` + prefix + `uPlot.iife.min.js"></script>
 <script src="` + prefix + `script.js"></script>
+<script src="` + prefix + `script_extra.js"></script>
 <link rel="stylesheet" href="` + prefix + `style.css">
 <link rel="stylesheet" href="` + prefix + `uPlot.min.css">
 `)
 		p.AppendHTML = `
 <div style="margin: 2em">
-
-<a href="#" style="display:none;margin-bottom: 10px" id="dl-csv" class="btn btn-primary" target="_blank">Download CSV</a> <span id="num-rows"></span>
-<div id="query-results">
-
+<hr />
+<div id="download-report" class="btn btn-info" style="display: none" onclick="downloadHTMLReport()">Download results as HTML report</div>
+<a id="link-form" style="display: none" href="#">Link to this form</a>
+<div id="query-results" style="margin-top:2em">
 </div>
 </div>
 `
@@ -80,13 +121,23 @@ func DBConsole(deps Deps, prefix string) usecase.Interactor {
 			instances = instances[1:]
 		}
 
+		qr, err := decodeForm(in.Form)
+		if err != nil {
+			return err
+		}
+
+		if len(qr.Queries) == 0 {
+			qr.Queries = []dbQuery{{Instance: instance(instances)}}
+		}
+
 		return deps.SchemaRepository().Render(out.ResponseWriter(), p,
 			jsonform.Form{
 				Title:             "DB Console",
 				SubmitURL:         prefix + "query-db",
 				SubmitMethod:      http.MethodPost,
+				SubmitText:        "Query",
 				SuccessStatus:     http.StatusOK,
-				Value:             QueryRequest{Queries: []dbQuery{{Instance: instance(instances)}}},
+				Value:             qr,
 				OnSuccess:         `onQuerySQLSuccess`,
 				OnBeforeSubmit:    `onQuerySQLBeforeSubmit`,
 				OnRequestFinished: `onQuerySQLFinished`,

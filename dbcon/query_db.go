@@ -1,13 +1,17 @@
 package dbcon
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/andybalholm/brotli"
 	"github.com/swaggest/usecase"
 )
 
@@ -40,20 +44,44 @@ type Result struct {
 	Columns   []string        `json:"columns"`
 	Values    [][]interface{} `json:"values"`
 	Elapsed   string          `json:"elapsed"`
-	Error     string          `json:"error"`
+	Error     string          `json:"error,omitempty"`
 	Instance  string          `json:"instance"`
+}
+
+// Response is an envelope for Result items and extra shared information.
+type Response struct {
+	Results []Result `json:"results,omitempty"`
+	Form    string   `json:"form,omitempty" description:"Base64 encoded brotli compressed incoming JSON request for a form param."`
 }
 
 // DBQuery queries SQL statements and returns results as JSON.
 func DBQuery(deps Deps) usecase.Interactor {
-	u := usecase.NewInteractor(func(ctx context.Context, input QueryRequest, output *[]Result) (err error) {
+	u := usecase.NewInteractor(func(ctx context.Context, input QueryRequest, output *Response) error {
 		var results []Result
 
 		for _, q := range input.Queries {
 			results = queryInstance(ctx, deps, q, results)
 		}
 
-		*output = results
+		output.Results = results
+
+		j, err := json.Marshal(input)
+		if err != nil {
+			return err
+		}
+
+		buf := bytes.NewBuffer(nil)
+		w := brotli.NewWriter(buf)
+
+		if _, err := w.Write(j); err != nil {
+			return err
+		}
+
+		if err := w.Close(); err != nil {
+			return err
+		}
+
+		output.Form = base64.StdEncoding.EncodeToString(buf.Bytes())
 
 		return nil
 	})
