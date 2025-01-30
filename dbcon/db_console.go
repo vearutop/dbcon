@@ -60,6 +60,7 @@ func decodeForm(b string) (qr QueryRequest, err error) {
 		}
 
 		r := brotli.NewReader(bytes.NewReader(j))
+
 		j, err = io.ReadAll(r)
 		if err != nil {
 			return qr, err

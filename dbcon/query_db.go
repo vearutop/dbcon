@@ -48,6 +48,7 @@ type Result struct {
 	Instance  string          `json:"instance"`
 }
 
+// Response is an envelope for Result items and extra shared information.
 type Response struct {
 	Results []Result `json:"results,omitempty"`
 	Form    string   `json:"form,omitempty" description:"Base64 encoded brotli compressed incoming JSON request for a form param."`
@@ -55,7 +56,7 @@ type Response struct {
 
 // DBQuery queries SQL statements and returns results as JSON.
 func DBQuery(deps Deps) usecase.Interactor {
-	u := usecase.NewInteractor(func(ctx context.Context, input QueryRequest, output *Response) (err error) {
+	u := usecase.NewInteractor(func(ctx context.Context, input QueryRequest, output *Response) error {
 		var results []Result
 
 		for _, q := range input.Queries {
@@ -71,10 +72,11 @@ func DBQuery(deps Deps) usecase.Interactor {
 
 		buf := bytes.NewBuffer(nil)
 		w := brotli.NewWriter(buf)
-		_, err = w.Write(j)
-		if err != nil {
+
+		if _, err := w.Write(j); err != nil {
 			return err
 		}
+
 		if err := w.Close(); err != nil {
 			return err
 		}
