@@ -3,10 +3,13 @@ package dbcon
 import (
 	"context"
 	"database/sql"
+
 	"github.com/bool64/sqluct"
 )
 
-func SqliteCompletions(db *sql.DB) []SQLCompletion {
+// SqliteCompletions returns keywords, functions, tables and columns as code completions.
+func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
+	//nolint:prealloc
 	var (
 		completions []SQLCompletion
 		tables      []string

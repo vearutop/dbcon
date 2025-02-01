@@ -83,7 +83,6 @@ func Main() { //nolint:funlen,cyclop
 				return
 			}
 
-			println("opened db:", dsn)
 			instances[dsn] = db
 			completions[dsn] = dbcon.SqliteCompletions(db)
 		case "postgres":

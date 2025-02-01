@@ -96,7 +96,7 @@ func DBConsole(deps Deps, prefix string) usecase.Interactor {
 	}
 
 	completions := deps.Completions()
-	var cmp = []SQLCompletion{
+	cmp := []SQLCompletion{
 		{Value: "-- plot", Score: 1000, Meta: "plot chart"},
 		{Value: "-- plot:time", Score: 1000, Meta: "plot time series"},
 		{Value: "-- pie", Score: 1000, Meta: "draw pie chart"},

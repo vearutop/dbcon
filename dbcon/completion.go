@@ -4,6 +4,7 @@ import (
 	"strings"
 )
 
+// SQLCompletion describes code completion unit.
 type SQLCompletion struct {
 	Value string `json:"value" example:"foo.bar"`
 	Score int    `json:"score" example:"1000"`
