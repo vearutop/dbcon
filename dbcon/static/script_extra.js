@@ -128,3 +128,45 @@ function onQuerySQLBeforeSubmit(values) {
 function onQuerySQLFinished() {
     $('#form-title-0').removeClass("spinner")
 }
+
+var completions = {}
+
+window.jsonform_ace_setup = function(setup){
+    setup()
+
+    $(".sql-statement").each(function(i, el){
+        var instanceSelect = $(el).parent().find('select')
+        var id = $(el).find('.ace_editor').parent().attr('id')
+
+        function prepare() {
+            var instance = instanceSelect.find(":selected").val()
+
+            var editor = ace.edit(id + '__ace')
+            editor.setTheme();
+            editor.setOptions({
+                enableBasicAutocompletion: true,
+                enableLiveAutocompletion: true
+            });
+
+            var cmp = completions[instance]
+
+            editor.completers = []
+
+            if (cmp) {
+                editor.completers.push({
+                    getCompletions: function(editor, session, pos, prefix, callback) {
+                        callback(null, cmp);
+                    }
+                });
+            }
+
+            editor.session.setMode("ace/mode/sql");
+        }
+
+        prepare()
+
+        instanceSelect.on('change', function() {
+            prepare()
+        });
+    })
+}

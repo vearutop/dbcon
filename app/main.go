@@ -64,6 +64,7 @@ func Main() { //nolint:funlen,cyclop
 	}
 
 	instances := map[string]*sql.DB{}
+	completions := map[string][]dbcon.SQLCompletion{}
 
 	for _, dsn := range flag.Args() {
 		u, err := url.Parse(dsn)
@@ -82,7 +83,9 @@ func Main() { //nolint:funlen,cyclop
 				return
 			}
 
+			println("opened db:", dsn)
 			instances[dsn] = db
+			completions[dsn] = dbcon.SqliteCompletions(db)
 		case "postgres":
 			db, err := sql.Open("postgres", dsn)
 			if err != nil {
@@ -130,7 +133,7 @@ func Main() { //nolint:funlen,cyclop
 		return nil
 	}))
 
-	dbcon.Mount(s, "/", dbcon.DefaultDeps(instances))
+	dbcon.Mount(s, "/", dbcon.DefaultDeps(instances, completions))
 
 	// Swagger UI endpoint at /docs.
 	s.Docs("/docs", swgui.New)
