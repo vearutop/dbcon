@@ -45,3 +45,12 @@
     font-size: 12px;
     dominant-baseline: middle;
 }
+
+.sql-statement .controls>div {
+    height: auto !important;
+}
+
+.sql-statement .ace_editor {
+    border: 1px solid #ddd;
+    resize: both;
+}

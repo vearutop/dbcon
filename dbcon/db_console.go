@@ -23,11 +23,13 @@ import (
 type Deps interface {
 	SchemaRepository() *jsonform.Repository
 	DBInstances() map[string]*sql.DB
+	Completions() map[string][]SQLCompletion
 }
 
 type dependencies struct {
-	form      *jsonform.Repository
-	instances map[string]*sql.DB
+	form        *jsonform.Repository
+	instances   map[string]*sql.DB
+	completions map[string][]SQLCompletion
 }
 
 func (d dependencies) SchemaRepository() *jsonform.Repository {
@@ -38,11 +40,16 @@ func (d dependencies) DBInstances() map[string]*sql.DB {
 	return d.instances
 }
 
+func (d dependencies) Completions() map[string][]SQLCompletion {
+	return d.completions
+}
+
 // DefaultDeps prepares dependencies from DB instances.
-func DefaultDeps(instances map[string]*sql.DB) Deps {
+func DefaultDeps(instances map[string]*sql.DB, completions map[string][]SQLCompletion) Deps {
 	return &dependencies{
-		form:      jsonform.NewRepository(&jsonschema.Reflector{}),
-		instances: instances,
+		form:        jsonform.NewRepository(&jsonschema.Reflector{}),
+		instances:   instances,
+		completions: completions,
 	}
 }
 
@@ -88,19 +95,43 @@ func DBConsole(deps Deps, prefix string) usecase.Interactor {
 		Form string `query:"form"`
 	}
 
+	completions := deps.Completions()
+	cmp := []SQLCompletion{
+		{Value: "-- plot", Score: 1000, Meta: "plot chart"},
+		{Value: "-- plot:time", Score: 1000, Meta: "plot time series"},
+		{Value: "-- pie", Score: 1000, Meta: "draw pie chart"},
+	}
+
+	for k, v := range completions {
+		completions[k] = append(v, cmp...)
+	}
+
 	u := usecase.NewInteractor(func(ctx context.Context, in req, out *response.EmbeddedSetter) error {
 		p := jsonform.Page{}
 
 		p.Title = "DB Console"
 
+		j, err := json.Marshal(completions)
+		if err != nil {
+			return err
+		}
+
 		p.AppendHTMLHead = template.HTML( //nolint:gosec
 			`
+<script src="` + prefix + `ace/ace.min.js"></script>
+<script src="` + prefix + `ace/ext-inline_autocomplete.min.js"></script>
+<script src="` + prefix + `ace/ext-language_tools.min.js"></script>
+
 <link rel="icon" href="` + prefix + `favicon.png" type="image/png"/>
 <script src="` + prefix + `uPlot.iife.min.js"></script>
 <script src="` + prefix + `script.js"></script>
 <script src="` + prefix + `script_extra.js"></script>
 <link rel="stylesheet" href="` + prefix + `style.css">
 <link rel="stylesheet" href="` + prefix + `uPlot.min.css">
+
+<script>
+completions = ` + string(j) + `
+</script>
 `)
 		p.AppendHTML = `
 <div style="margin: 2em">

@@ -17,7 +17,7 @@ import (
 
 type dbQuery struct {
 	Instance  instance `json:"instance" title:"DB Instance"`
-	Statement string   `json:"statement" formType:"textarea" title:"SQL Statements"`
+	Statement string   `json:"statement" formType:"ace" aceMode:"ace/mode/sql" htmlClass:"sql-statement" title:"SQL Statements"`
 }
 
 type instance string
