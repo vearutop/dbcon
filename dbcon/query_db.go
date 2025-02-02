@@ -17,7 +17,7 @@ import (
 
 type dbQuery struct {
 	Instance  instance `json:"instance" title:"DB Instance"`
-	Statement string   `json:"statement" formType:"ace" aceMode:"ace/mode/sql" htmlClass:"sql-statement" title:"SQL Statements"`
+	Statement string   `json:"statement" formType:"ace" htmlClass:"sql-statement" title:"SQL Statements"`
 }
 
 type instance string
@@ -90,7 +90,15 @@ func DBQuery(deps Deps) usecase.Interactor {
 }
 
 func queryInstance(ctx context.Context, deps Deps, query dbQuery, results []Result) []Result {
-	db := deps.DBInstances()[string(query.Instance)]
+	var db *sql.DB
+
+	for _, v := range deps.DBInstances() {
+		if v.Name == string(query.Instance) {
+			db = v.Instance
+
+			break
+		}
+	}
 
 	if db == nil {
 		result := Result{

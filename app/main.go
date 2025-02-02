@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/bool64/dev/version"
+	"github.com/bool64/sqluct"
 	_ "github.com/go-sql-driver/mysql" // DB driver.
 	_ "github.com/lib/pq"              // DB driver.
 	"github.com/swaggest/openapi-go/openapi31"
@@ -63,8 +64,7 @@ func Main() { //nolint:funlen,cyclop
 		return
 	}
 
-	instances := map[string]*sql.DB{}
-	completions := map[string][]dbcon.SQLCompletion{}
+	var instances []dbcon.DBInstance
 
 	for _, dsn := range flag.Args() {
 		u, err := url.Parse(dsn)
@@ -83,8 +83,11 @@ func Main() { //nolint:funlen,cyclop
 				return
 			}
 
-			instances[dsn] = db
-			completions[dsn] = dbcon.SqliteCompletions(db)
+			instances = append(instances, dbcon.DBInstance{
+				Name:     dsn,
+				Dialect:  sqluct.DialectSQLite3,
+				Instance: db,
+			})
 		case "postgres":
 			db, err := sql.Open("postgres", dsn)
 			if err != nil {
@@ -93,7 +96,11 @@ func Main() { //nolint:funlen,cyclop
 				return
 			}
 
-			instances[dsn] = db
+			instances = append(instances, dbcon.DBInstance{
+				Name:     dsn,
+				Dialect:  sqluct.DialectPostgres,
+				Instance: db,
+			})
 		case "mysql":
 			u.Host = "tcp(" + u.Host + ")"
 			d2 := strings.TrimPrefix(u.String(), "mysql://")
@@ -105,13 +112,17 @@ func Main() { //nolint:funlen,cyclop
 				return
 			}
 
-			instances[dsn] = db
+			instances = append(instances, dbcon.DBInstance{
+				Name:     dsn,
+				Dialect:  sqluct.DialectMySQL,
+				Instance: db,
+			})
 		}
 	}
 
 	sh.OnShutdown("close_db", func() {
 		for dsn, db := range instances {
-			if err := db.Close(); err != nil {
+			if err := db.Instance.Close(); err != nil {
 				log.Println("failed to close db:", dsn, err.Error())
 			}
 		}
@@ -132,7 +143,7 @@ func Main() { //nolint:funlen,cyclop
 		return nil
 	}))
 
-	dbcon.Mount(s, "/", dbcon.DefaultDeps(instances, completions))
+	dbcon.Mount(s, "/", dbcon.DefaultDeps(instances))
 
 	// Swagger UI endpoint at /docs.
 	s.Docs("/docs", swgui.New)

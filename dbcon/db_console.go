@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/andybalholm/brotli"
+	"github.com/bool64/sqluct"
 	jsonform "github.com/swaggest/jsonform-go"
 	"github.com/swaggest/jsonschema-go"
 	"github.com/swaggest/rest/response"
@@ -19,37 +20,38 @@ import (
 	"github.com/swaggest/usecase/status"
 )
 
+// DBInstance describes a DB instance.
+type DBInstance struct {
+	Name        string
+	Dialect     sqluct.Dialect
+	Instance    *sql.DB
+	Completions []SQLCompletion
+}
+
 // Deps describes required resources.
 type Deps interface {
 	SchemaRepository() *jsonform.Repository
-	DBInstances() map[string]*sql.DB
-	Completions() map[string][]SQLCompletion
+	DBInstances() []DBInstance
 }
 
 type dependencies struct {
-	form        *jsonform.Repository
-	instances   map[string]*sql.DB
-	completions map[string][]SQLCompletion
+	form      *jsonform.Repository
+	instances []DBInstance
 }
 
 func (d dependencies) SchemaRepository() *jsonform.Repository {
 	return d.form
 }
 
-func (d dependencies) DBInstances() map[string]*sql.DB {
+func (d dependencies) DBInstances() []DBInstance {
 	return d.instances
 }
 
-func (d dependencies) Completions() map[string][]SQLCompletion {
-	return d.completions
-}
-
 // DefaultDeps prepares dependencies from DB instances.
-func DefaultDeps(instances map[string]*sql.DB, completions map[string][]SQLCompletion) Deps {
+func DefaultDeps(instances []DBInstance) Deps {
 	return &dependencies{
-		form:        jsonform.NewRepository(&jsonschema.Reflector{}),
-		instances:   instances,
-		completions: completions,
+		form:      jsonform.NewRepository(&jsonschema.Reflector{}),
+		instances: instances,
 	}
 }
 
@@ -95,15 +97,20 @@ func DBConsole(deps Deps, prefix string) usecase.Interactor {
 		Form string `query:"form"`
 	}
 
-	completions := deps.Completions()
+	completions := map[string][]SQLCompletion{}
 	cmp := []SQLCompletion{
 		{Value: "-- plot", Score: 1000, Meta: "plot chart"},
 		{Value: "-- plot:time", Score: 1000, Meta: "plot time series"},
 		{Value: "-- pie", Score: 1000, Meta: "draw pie chart"},
+		{Value: "-- pie:total=X", Score: 1000, Meta: "draw pie chart"},
 	}
 
-	for k, v := range completions {
-		completions[k] = append(v, cmp...)
+	for _, v := range deps.DBInstances() {
+		if v.Dialect == sqluct.DialectSQLite3 {
+			v.Completions = append(v.Completions, SqliteCompletions(v.Instance)...)
+		}
+
+		completions[v.Name] = append(v.Completions, cmp...)
 	}
 
 	u := usecase.NewInteractor(func(ctx context.Context, in req, out *response.EmbeddedSetter) error {
@@ -144,8 +151,8 @@ completions = ` + string(j) + `
 `
 
 		instances := ""
-		for k := range deps.DBInstances() {
-			instances += "," + k
+		for _, v := range deps.DBInstances() {
+			instances += "," + v.Name
 		}
 
 		if instances != "" {

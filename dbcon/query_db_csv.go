@@ -3,6 +3,7 @@ package dbcon
 
 import (
 	"context"
+	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -23,7 +24,15 @@ func DBQueryCSV(deps Deps) usecase.Interactor {
 	}
 
 	u := usecase.NewInteractor(func(ctx context.Context, input request, output *response.EmbeddedSetter) error {
-		db := deps.DBInstances()[string(input.Instance)]
+		var db *sql.DB
+
+		for _, v := range deps.DBInstances() {
+			if v.Name == string(input.Instance) {
+				db = v.Instance
+
+				break
+			}
+		}
 
 		if db == nil {
 			return status.Wrap(fmt.Errorf("unknown instance: %s", input.Instance), status.NotFound)

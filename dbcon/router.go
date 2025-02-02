@@ -4,6 +4,7 @@ import (
 	"embed"
 	"net/http"
 
+	"github.com/swaggest/openapi-go/openapi31"
 	"github.com/swaggest/rest/web"
 	"github.com/vearutop/statigz"
 )
@@ -24,7 +25,14 @@ func Mount(s *web.Service, prefix string, deps Deps) {
 	s.Post("/query-db", DBQuery(deps))
 	s.Get("/query-db.csv", DBQueryCSV(deps))
 
-	s.Mount(prefix, http.StripPrefix(prefix, staticServer))
+	s.Mount("/", http.StripPrefix(prefix, staticServer))
+}
 
-	deps.SchemaRepository().Mount(s, "/json-form/")
+// Handler creates an HTTP handler.
+func Handler(prefix string, deps Deps) http.Handler {
+	s := web.NewService(openapi31.NewReflector())
+
+	Mount(s, prefix, deps)
+
+	return s
 }
