@@ -54,6 +54,7 @@ dbcon [OPTIONS] DB...
                 my.sqlite
   -listen string
         listen address, port 0 picks a free random port (default "127.0.0.1:0")
+  -s    skip browser opening
 ```
 
 Multiple statements can be separated with `;`.
@@ -62,6 +63,12 @@ If a statement has `-- plot` in comment, result is plotted on a chart.
 
 First column is used for X axis, remaining columns go to Y axis.
 
-X axis can be a UTC datetime if values are UNIX timestamp integers and statement has a comment `-- plot:time`.
+X-axis can be a UTC datetime if values are UNIX timestamp integers and statement has a comment `-- plot:time`.
+
+If a statement has `-- pie` in comment, result is rendered as a pie chart.
+
+First column is used for the numeric value of pie slice, second is a label.
+
+Pie total is calculated as sum of all values, for cases of partial pie you can provide the total with `-- pie:total=123`.
 
 ![Example](dbcon.png)

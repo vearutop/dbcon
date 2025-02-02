@@ -170,7 +170,7 @@ function renderResult(result, idx) {
     }
 
     if (pie_data) {
-        var m = result.statement.match(/pie_total=(\d+)/)
+        var m = result.statement.match(/pie:total=(\d+)/)
         var total = 0
         if (m && m[1]) {
             total = parseFloat(m[1])
