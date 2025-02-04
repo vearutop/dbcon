@@ -26,6 +26,7 @@ func Mount(s *web.Service, prefix string, deps Deps) {
 	s.Get("/query-db.csv", DBQueryCSV(deps))
 
 	s.Mount("/", http.StripPrefix(prefix, staticServer))
+	deps.SchemaRepository().Mount(s, "/json-form/")
 }
 
 // Handler creates an HTTP handler.

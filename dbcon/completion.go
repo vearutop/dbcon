@@ -11,8 +11,8 @@ type SQLCompletion struct {
 	Meta  string `json:"meta" example:"column"`
 }
 
-func addCompletionsFromStringList(list string, meta string, completions []SQLCompletion) []SQLCompletion {
-	for _, t := range strings.Split(list, "\n") {
+func addCompletionsFromStringList(list string, sep string, meta string, completions []SQLCompletion) []SQLCompletion {
+	for _, t := range strings.Split(list, sep) {
 		t = strings.TrimSpace(t)
 		if t == "" {
 			continue
@@ -20,7 +20,7 @@ func addCompletionsFromStringList(list string, meta string, completions []SQLCom
 
 		completions = append(completions, SQLCompletion{
 			Value: t,
-			Score: 100,
+			Score: 0,
 			Meta:  meta,
 		})
 	}

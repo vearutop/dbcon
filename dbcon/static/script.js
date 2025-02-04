@@ -46,12 +46,15 @@ function renderResult(result, idx) {
         return
     }
 
+    var rowsCnt = 0
     if (result.values) {
         if (!isPortableReport) {
             res += '<a href="/query-db.csv?instance=' + encodeURIComponent(result.instance) + '&statement=' + encodeURIComponent(result.statement) + '" style="margin-bottom: 10px" class="btn btn-info" target="_blank">Download CSV</a> '
         }
-        res += '<span>Rows: ' + result.values.length + ', elapsed: ' + result.elapsed + '</span>\n'
+
+        rowsCnt = result.values.length
     }
+    res += '<span>Rows: ' + rowsCnt + ', elapsed: ' + result.elapsed + '</span>\n'
 
     let uplot_opts = null;
     let uplot_data = null;
