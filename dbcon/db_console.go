@@ -106,8 +106,11 @@ func DBConsole(deps Deps, prefix string) usecase.Interactor {
 	}
 
 	for _, v := range deps.DBInstances() {
-		if v.Dialect == sqluct.DialectSQLite3 {
+		switch v.Dialect { //nolint:exhaustive
+		case sqluct.DialectSQLite3:
 			v.Completions = append(v.Completions, SqliteCompletions(v.Instance)...)
+		case sqluct.DialectPostgres:
+			v.Completions = append(v.Completions, PostgresCompletions(v.Instance)...)
 		}
 
 		completions[v.Name] = append(v.Completions, cmp...)

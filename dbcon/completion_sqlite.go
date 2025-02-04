@@ -15,6 +15,65 @@ func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
 		tables      []string
 	)
 
+	res := makeResult(context.Background(), db, "",
+		"select tbl_name from sqlite_master where type='table' and tbl_name != 'sqlite_sequence';")
+
+	if len(res.Values) == 0 {
+		return completions
+	}
+
+	for _, row := range res.Values {
+		table, ok := row[0].(string)
+		if !ok {
+			continue
+		}
+
+		completions = append(completions, SQLCompletion{
+			Value: sqluct.QuoteBackticks(table),
+			Score: 10000,
+			Meta:  "table",
+		})
+
+		completions = append(completions, SQLCompletion{
+			Value: "/* table */ " + sqluct.QuoteBackticks(table),
+			Score: 10000,
+			Meta:  "table",
+		})
+
+		tables = append(tables, table)
+	}
+
+	for _, table := range tables {
+		res = makeResult(context.Background(), db, "", "PRAGMA table_info("+sqluct.QuoteBackticks(table)+");")
+
+		if len(res.Values) == 0 {
+			continue
+		}
+
+		for _, row := range res.Values {
+			if len(row) < 2 {
+				continue
+			}
+
+			column, ok := row[1].(string)
+			if !ok {
+				continue
+			}
+
+			completions = append(completions, SQLCompletion{
+				Value: sqluct.QuoteBackticks(table, column),
+				Score: 20000,
+				Meta:  "column",
+			})
+
+			completions = append(completions, SQLCompletion{
+				Value: sqluct.QuoteBackticks(column),
+				Score: 20000,
+				Meta:  "column",
+			})
+		}
+	}
+
 	completions = addCompletionsFromStringList(`
     ABORT
     ACTION
@@ -162,7 +221,7 @@ func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
     WHERE
     WINDOW
     WITH
-    WITHOUT`, "keyword", completions)
+    WITHOUT`, "\n", "keyword", completions)
 
 	completions = addCompletionsFromStringList(`
     abs(X)
@@ -224,7 +283,7 @@ func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
     unicode(X)
     unlikely(X)
     upper(X)
-    zeroblob(N)`, "core-func", completions)
+    zeroblob(N)`, "\n", "core-func", completions)
 
 	completions = addCompletionsFromStringList(`
     date(time-value, modifier, modifier, ...)
@@ -233,7 +292,7 @@ func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
     julianday(time-value, modifier, modifier, ...)
     unixepoch(time-value, modifier, modifier, ...)
     strftime(format, time-value, modifier, modifier, ...)
-    timediff(time-value, time-value)`, "date-func", completions)
+    timediff(time-value, time-value)`, "\n", "date-func", completions)
 
 	completions = addCompletionsFromStringList(`
     avg(X)
@@ -245,7 +304,7 @@ func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
     min(X)
     string_agg(X,Y)
     sum(X)
-    total(X)`, "aggregate-func", completions)
+    total(X)`, "\n", "aggregate-func", completions)
 
 	completions = addCompletionsFromStringList(`
 	row_number()
@@ -262,7 +321,7 @@ func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
 	lead(expr, offset, default)
 	first_value(expr)
 	last_value(expr)
-	nth_value(expr, N)`, "window-func", completions)
+	nth_value(expr, N)`, "\n", "window-func", completions)
 
 	completions = addCompletionsFromStringList(`
     acos(X)
@@ -294,7 +353,7 @@ func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
     sqrt(X)
     tan(X)
     tanh(X)
-    trunc(X)`, "math-func", completions)
+    trunc(X)`, "\n", "math-func", completions)
 
 	completions = addCompletionsFromStringList(`
     json(json)
@@ -325,78 +384,19 @@ func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
     json_type(json,path)
     json_valid(json)
     json_valid(json,flags)
-    json_quote(value)`, "json-scalar-func", completions)
+    json_quote(value)`, "\n", "json-scalar-func", completions)
 
 	completions = addCompletionsFromStringList(`
     json_group_array(value)
     jsonb_group_array(value)
     json_group_object(label,value)
-    jsonb_group_object(name,value)`, "json-aggregate-func", completions)
+    jsonb_group_object(name,value)`, "\n", "json-aggregate-func", completions)
 
 	completions = addCompletionsFromStringList(`
     json_each(json)
     json_each(json,path)
     json_tree(json)
-    json_tree(json,path)`, "json-func", completions)
-
-	res := makeResult(context.Background(), db, "",
-		"select tbl_name from sqlite_master where type='table' and tbl_name != 'sqlite_sequence';")
-
-	if len(res.Values) == 0 {
-		return completions
-	}
-
-	for _, row := range res.Values {
-		table, ok := row[0].(string)
-		if !ok {
-			continue
-		}
-
-		completions = append(completions, SQLCompletion{
-			Value: sqluct.QuoteBackticks(table),
-			Score: 10000,
-			Meta:  "table",
-		})
-
-		completions = append(completions, SQLCompletion{
-			Value: "/* table */ " + sqluct.QuoteBackticks(table),
-			Score: 10000,
-			Meta:  "table",
-		})
-
-		tables = append(tables, table)
-	}
-
-	for _, table := range tables {
-		res = makeResult(context.Background(), db, "", "PRAGMA table_info("+sqluct.QuoteBackticks(table)+");")
-
-		if len(res.Values) == 0 {
-			continue
-		}
-
-		for _, row := range res.Values {
-			if len(row) < 2 {
-				continue
-			}
-
-			column, ok := row[1].(string)
-			if !ok {
-				continue
-			}
-
-			completions = append(completions, SQLCompletion{
-				Value: sqluct.QuoteBackticks(table, column),
-				Score: 20000,
-				Meta:  "column",
-			})
-
-			completions = append(completions, SQLCompletion{
-				Value: sqluct.QuoteBackticks(column),
-				Score: 20000,
-				Meta:  "column",
-			})
-		}
-	}
+    json_tree(json,path)`, "\n", "json-func", completions)
 
 	return completions
 }

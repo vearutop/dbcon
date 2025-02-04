@@ -97,7 +97,7 @@ func Main() { //nolint:funlen,cyclop
 			}
 
 			instances = append(instances, dbcon.DBInstance{
-				Name:     dsn,
+				Name:     filterDsn(dsn),
 				Dialect:  sqluct.DialectPostgres,
 				Instance: db,
 			})
@@ -113,7 +113,7 @@ func Main() { //nolint:funlen,cyclop
 			}
 
 			instances = append(instances, dbcon.DBInstance{
-				Name:     dsn,
+				Name:     filterDsn(dsn),
 				Dialect:  sqluct.DialectMySQL,
 				Instance: db,
 			})
@@ -273,4 +273,17 @@ func findIP(iface net.Interface) (string, error) {
 	}
 
 	return ip, nil
+}
+
+func filterDsn(s string) string {
+	u, err := url.Parse(s)
+	if err != nil {
+		log.Printf("filterDsn failed for %s: %s", s, err.Error())
+
+		return s
+	}
+
+	u.User = nil
+
+	return u.String()
 }
