@@ -33,6 +33,7 @@ func PostgresCompletions(db *sql.DB) []SQLCompletion {
 			Value: sqluct.QuoteANSI(table),
 			Score: 10000,
 			Meta:  "table",
+			Table: sqluct.QuoteANSI(table),
 		})
 
 		completions = append(completions, SQLCompletion{
@@ -58,9 +59,11 @@ func PostgresCompletions(db *sql.DB) []SQLCompletion {
 			}
 
 			completions = append(completions, SQLCompletion{
-				Value: sqluct.QuoteANSI(table, column),
-				Score: 20000,
-				Meta:  "column",
+				Value:  sqluct.QuoteANSI(table, column),
+				Score:  20000,
+				Meta:   "column",
+				Table:  sqluct.QuoteANSI(table),
+				Column: sqluct.QuoteANSI(column),
 			})
 
 			completions = append(completions, SQLCompletion{

@@ -131,6 +131,50 @@ function onQuerySQLFinished() {
 
 var completions = {}
 
+function renderColumnsDirectory() {
+    var rows = ''
+
+    for (var instance in completions) {
+        var cmp = completions[instance]
+        for (var i in cmp) {
+            var item = cmp[i]
+
+            if (item.table && item.column) {
+                rows += '<tr><td>' + instance + '</td><td>' + item.table + '</td><td>' + item.column + "</td><td>column</td></tr>\n"
+                continue
+            }
+
+            if (item.table) {
+                rows += '<tr><td>' + instance + '</td><td>' + item.table + "</td><td></td><td>table</td></tr>\n"
+                continue
+            }
+        }
+    }
+
+    if (!rows) {
+        return
+    }
+
+    var res = '<table class="pure-table result" style="display: none;margin-top:2em;background: #fff"><thead><tr>';
+    res += '<th>instance</th><th>table</th><th>column</th><th>entity</th>'
+    res += "</tr></thead>\n"
+
+    res += "<tbody>"
+    res += rows
+    res += "</tbody></table>"
+
+    $('#form-title-0').parent().parent().append('<div id="columns-directory" class="pure-u-2-5" style="position: absolute;margin-top: 4em;"></div>')
+
+    $('#columns-directory').html('<div class="btn btn-info" onclick="$(this).next().toggle();return false;">Columns Directory</div>' + res)
+    $('#columns-directory table').fancyTable({
+        sortable: true,
+        searchable: true,
+        pagination: false,
+        globalSearch: true
+    });
+}
+
+
 window.jsonform_ace_setup = function(setup){
     setup()
 
