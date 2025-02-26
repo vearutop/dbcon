@@ -146,6 +146,10 @@ completions = ` + string(j) + `
 		p.AppendHTML = `
 <div style="margin: 2em">
 <hr />
+<script>
+renderColumnsDirectory();
+</script>
+
 <div id="download-report" class="btn btn-info" style="display: none" onclick="downloadHTMLReport()">Download results as HTML report</div>
 <a id="link-form" style="display: none" href="#">Link to this form</a>
 <div id="query-results" style="margin-top:2em">

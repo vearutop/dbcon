@@ -6,9 +6,11 @@ import (
 
 // SQLCompletion describes code completion unit.
 type SQLCompletion struct {
-	Value string `json:"value" example:"foo.bar"`
-	Score int    `json:"score" example:"1000"`
-	Meta  string `json:"meta" example:"column"`
+	Value  string `json:"value" example:"foo.bar"`
+	Score  int    `json:"score" example:"1000"`
+	Meta   string `json:"meta" example:"column"`
+	Table  string `json:"table,omitempty"`
+	Column string `json:"column,omitempty"`
 }
 
 func addCompletionsFromStringList(list string, sep string, meta string, completions []SQLCompletion) []SQLCompletion {
