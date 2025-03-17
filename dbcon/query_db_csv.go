@@ -6,9 +6,9 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
-	"strconv"
 	"strings"
 
 	"github.com/swaggest/rest/response"
@@ -17,7 +17,7 @@ import (
 )
 
 // DBQueryCSV returns query result as CSV.
-func DBQueryCSV(deps Deps) usecase.Interactor {
+func DBQueryCSV(deps Deps, options ...func(*Options)) usecase.Interactor {
 	type request struct {
 		Instance  instance `query:"instance"`
 		Statement string   `query:"statement" formType:"textarea" title:"Statement" description:"SQL Statement to execute."`
@@ -38,21 +38,17 @@ func DBQueryCSV(deps Deps) usecase.Interactor {
 			return status.Wrap(fmt.Errorf("unknown instance: %s", input.Instance), status.NotFound)
 		}
 
-		rows, err := db.QueryContext(ctx, input.Statement)
-		if err != nil {
-			return err
+		o := Options{}
+
+		for _, opt := range options {
+			opt(&o)
 		}
 
-		cols, err := rows.Columns()
-		if err != nil {
-			return fmt.Errorf("query columns: %w", err)
-		}
+		res := makeResult(ctx, db, string(input.Instance), input.Statement, o)
 
-		defer func() {
-			if err := rows.Close(); err != nil {
-				log.Println("failed to close rows:", err.Error())
-			}
-		}()
+		if res.Error != "" {
+			return errors.New(res.Error)
+		}
 
 		rw := output.ResponseWriter()
 		rw.Header().Set("Content-Type", "text/csv")
@@ -61,46 +57,27 @@ func DBQueryCSV(deps Deps) usecase.Interactor {
 
 		w := csv.NewWriter(rw)
 
-		if err := w.Write(cols); err != nil {
+		if err := w.Write(res.Columns); err != nil {
 			log.Println("csv write failed:", err.Error())
 		}
 
-		for rows.Next() {
-			columns := make([]interface{}, len(cols))
-			columnPointers := make([]interface{}, len(cols))
+		for i := 0; i < len(res.Values); i++ {
+			values := res.Values[i]
 
-			for i := range columns {
-				columnPointers[i] = &columns[i]
-			}
+			var row []string
 
-			if err := rows.Scan(columnPointers...); err != nil {
-				return fmt.Errorf("scan rows: %w", err)
-			}
-
-			var values []string
-
-			for i := range cols {
-				v := columns[i]
-
-				if iv, ok := v.(int64); ok {
-					v = strconv.Itoa(int(iv))
-				}
-
+			for _, v := range values {
 				j, err := json.Marshal(v)
 				if err != nil {
 					return err
 				}
 
-				values = append(values, strings.Trim(string(j), `"`))
+				row = append(row, strings.Trim(string(j), `"`))
 			}
 
-			if err := w.Write(values); err != nil {
+			if err := w.Write(row); err != nil {
 				log.Println("csv write failed:", err.Error())
 			}
-		}
-
-		if err := rows.Err(); err != nil {
-			log.Println("rows error:", err.Error())
 		}
 
 		w.Flush()

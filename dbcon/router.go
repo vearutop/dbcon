@@ -19,21 +19,21 @@ var (
 )
 
 // Mount instruments the router with handlers.
-func Mount(s *web.Service, prefix string, deps Deps) {
-	s.Get("/", DBConsole(deps, prefix))
-	s.Get("/db.html", DBConsole(deps, prefix))
-	s.Post("/query-db", DBQuery(deps))
-	s.Get("/query-db.csv", DBQueryCSV(deps))
+func Mount(s *web.Service, prefix string, deps Deps, options ...func(*Options)) {
+	s.Get("/", DBConsole(deps, prefix, options...))
+	s.Get("/db.html", DBConsole(deps, prefix, options...))
+	s.Post("/query-db", DBQuery(deps, options...))
+	s.Get("/query-db.csv", DBQueryCSV(deps, options...))
 
 	s.Mount("/", http.StripPrefix(prefix, staticServer))
 	deps.SchemaRepository().Mount(s, "/json-form/")
 }
 
 // Handler creates an HTTP handler.
-func Handler(prefix string, deps Deps) http.Handler {
+func Handler(prefix string, deps Deps, options ...func(*Options)) http.Handler {
 	s := web.NewService(openapi31.NewReflector())
 
-	Mount(s, prefix, deps)
+	Mount(s, prefix, deps, options...)
 
 	return s
 }

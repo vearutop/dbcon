@@ -20,6 +20,23 @@ import (
 	"github.com/swaggest/usecase/status"
 )
 
+// Options defines DBCon customizable params.
+type Options struct {
+	Completions []SQLCompletion
+
+	// valueProcessor is map of function name to processor function.
+	valueProcessor map[string]func(any) any
+}
+
+// AddValueProcessor adds a function to postprocess result column value.
+func (o *Options) AddValueProcessor(name string, fn func(any) any) {
+	if o.valueProcessor == nil {
+		o.valueProcessor = make(map[string]func(any) any)
+	}
+
+	o.valueProcessor[name] = fn
+}
+
 // DBInstance describes a DB instance.
 type DBInstance struct {
 	Name        string
@@ -86,7 +103,7 @@ func decodeForm(b string) (qr QueryRequest, err error) {
 }
 
 // DBConsole creates use case interactor to show DB console.
-func DBConsole(deps Deps, prefix string) usecase.Interactor {
+func DBConsole(deps Deps, prefix string, options ...func(*Options)) usecase.Interactor {
 	if !strings.HasSuffix(prefix, "/") {
 		prefix += "/"
 	}
@@ -97,12 +114,23 @@ func DBConsole(deps Deps, prefix string) usecase.Interactor {
 		Form string `query:"form"`
 	}
 
+	o := Options{}
+	for _, option := range options {
+		option(&o)
+	}
+
 	completions := map[string][]SQLCompletion{}
 	cmp := []SQLCompletion{
 		{Value: "-- plot", Score: 1000, Meta: "plot chart"},
 		{Value: "-- plot:time", Score: 1000, Meta: "plot time series"},
 		{Value: "-- pie", Score: 1000, Meta: "draw pie chart"},
 		{Value: "-- pie:total=X", Score: 1000, Meta: "draw pie chart"},
+	}
+
+	cmp = append(cmp, o.Completions...)
+
+	for k := range o.valueProcessor {
+		cmp = append(cmp, SQLCompletion{Value: "-- " + k + ":column_name", Score: 1000, Meta: "value processor"})
 	}
 
 	for _, v := range deps.DBInstances() {

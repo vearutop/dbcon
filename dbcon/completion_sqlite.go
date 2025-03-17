@@ -16,7 +16,7 @@ func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
 	)
 
 	res := makeResult(context.Background(), db, "",
-		"select tbl_name from sqlite_master where type='table' and tbl_name != 'sqlite_sequence';")
+		"select tbl_name from sqlite_master where type='table' and tbl_name != 'sqlite_sequence';", Options{})
 
 	if len(res.Values) == 0 {
 		return completions
@@ -45,7 +45,7 @@ func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
 	}
 
 	for _, table := range tables {
-		res = makeResult(context.Background(), db, "", "PRAGMA table_info("+sqluct.QuoteBackticks(table)+");")
+		res = makeResult(context.Background(), db, "", "PRAGMA table_info("+sqluct.QuoteBackticks(table)+");", Options{})
 
 		if len(res.Values) == 0 {
 			continue

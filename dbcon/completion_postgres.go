@@ -17,7 +17,7 @@ func PostgresCompletions(db *sql.DB) []SQLCompletion {
 	)
 
 	res := makeResult(context.Background(), db, "",
-		"select table_name from information_schema.tables where table_schema='public';")
+		"select table_name from information_schema.tables where table_schema='public';", Options{})
 
 	if len(res.Values) == 0 {
 		return completions
@@ -46,7 +46,7 @@ func PostgresCompletions(db *sql.DB) []SQLCompletion {
 	}
 
 	for _, table := range tables {
-		res = makeResult(context.Background(), db, "", "SELECT column_name FROM information_schema.columns WHERE table_name = '"+table+"';")
+		res = makeResult(context.Background(), db, "", "SELECT column_name FROM information_schema.columns WHERE table_name = '"+table+"';", Options{})
 
 		if len(res.Values) == 0 {
 			continue
