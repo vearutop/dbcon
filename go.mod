@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/andybalholm/brotli v1.0.5
-	github.com/bool64/dev v0.2.38
+	github.com/bool64/dev v0.2.39
 	github.com/bool64/sqluct v0.2.4
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/lib/pq v1.10.9

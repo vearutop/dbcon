@@ -55,12 +55,18 @@ type Response struct {
 }
 
 // DBQuery queries SQL statements and returns results as JSON.
-func DBQuery(deps Deps) usecase.Interactor {
+func DBQuery(deps Deps, options ...func(*Options)) usecase.Interactor {
+	o := Options{}
+
+	for _, option := range options {
+		option(&o)
+	}
+
 	u := usecase.NewInteractor(func(ctx context.Context, input QueryRequest, output *Response) error {
 		var results []Result
 
 		for _, q := range input.Queries {
-			results = queryInstance(ctx, deps, q, results)
+			results = queryInstance(ctx, deps, q, results, o)
 		}
 
 		output.Results = results
@@ -89,7 +95,7 @@ func DBQuery(deps Deps) usecase.Interactor {
 	return u
 }
 
-func queryInstance(ctx context.Context, deps Deps, query dbQuery, results []Result) []Result {
+func queryInstance(ctx context.Context, deps Deps, query dbQuery, results []Result, o Options) []Result {
 	var db *sql.DB
 
 	for _, v := range deps.DBInstances() {
@@ -111,13 +117,13 @@ func queryInstance(ctx context.Context, deps Deps, query dbQuery, results []Resu
 	}
 
 	for _, statement := range SplitStatements(query.Statement) {
-		results = append(results, makeResult(ctx, db, string(query.Instance), statement))
+		results = append(results, makeResult(ctx, db, string(query.Instance), statement, o))
 	}
 
 	return results
 }
 
-func makeResult(ctx context.Context, db *sql.DB, instance, statement string) (result Result) {
+func makeResult(ctx context.Context, db *sql.DB, instance, statement string, o Options) (result Result) {
 	result = Result{
 		Instance: instance,
 	}
@@ -137,6 +143,13 @@ func makeResult(ctx context.Context, db *sql.DB, instance, statement string) (re
 	result.Elapsed = time.Since(start).String()
 
 	cols, err := rows.Columns()
+	if err != nil {
+		result.Error = err.Error()
+
+		return result
+	}
+
+	colProcessor, err := makeColProcessor(statement, cols, o)
 	if err != nil {
 		result.Error = err.Error()
 
@@ -169,6 +182,16 @@ func makeResult(ctx context.Context, db *sql.DB, instance, statement string) (re
 			return result
 		}
 
+		for i, p := range colProcessor {
+			v := values[i]
+
+			for _, fn := range p {
+				v = fn(v)
+			}
+
+			values[i] = v
+		}
+
 		for i, v := range values {
 			if iv, ok := v.(int64); ok {
 				values[i] = strconv.Itoa(int(iv))
@@ -179,4 +202,47 @@ func makeResult(ctx context.Context, db *sql.DB, instance, statement string) (re
 	}
 
 	return result
+}
+
+func makeColProcessor(statement string, cols []string, o Options) (map[int][]func(any) any, error) {
+	if len(o.valueProcessor) == 0 {
+		return nil, nil //nolint:nilnil
+	}
+
+	colProcessor := make(map[int][]func(any) any)
+
+	for _, l := range strings.Split(statement, "\n") {
+		l = strings.TrimSpace(l)
+
+		if !strings.HasPrefix(l, "-- ") {
+			continue
+		}
+
+		for name, f := range o.valueProcessor {
+			pref := "-- " + name + ":"
+			if strings.HasPrefix(l, pref) {
+				colName := strings.TrimPrefix(l, pref)
+
+				found := false
+
+				for i, c := range cols {
+					if colName == c {
+						found = true
+
+						colProcessor[i] = append(colProcessor[i], f)
+
+						break
+					}
+				}
+
+				if !found {
+					return nil, fmt.Errorf("unknown column %s in %s", colName, l)
+				}
+
+				break
+			}
+		}
+	}
+
+	return colProcessor, nil
 }
