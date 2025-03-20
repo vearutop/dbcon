@@ -35,12 +35,6 @@ func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
 			Table: sqluct.QuoteBackticks(table),
 		})
 
-		completions = append(completions, SQLCompletion{
-			Value: "/* table */ " + sqluct.QuoteBackticks(table),
-			Score: 10000,
-			Meta:  "table",
-		})
-
 		tables = append(tables, table)
 	}
 
@@ -62,17 +56,11 @@ func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
 			}
 
 			completions = append(completions, SQLCompletion{
-				Value:  sqluct.QuoteBackticks(table, column),
+				Value:  sqluct.QuoteBackticks(column),
 				Score:  20000,
-				Meta:   "column",
+				Meta:   sqluct.QuoteBackticks(table),
 				Table:  sqluct.QuoteBackticks(table),
 				Column: sqluct.QuoteBackticks(column),
-			})
-
-			completions = append(completions, SQLCompletion{
-				Value: sqluct.QuoteBackticks(column),
-				Score: 20000,
-				Meta:  "column",
 			})
 		}
 	}
