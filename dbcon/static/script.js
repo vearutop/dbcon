@@ -1,5 +1,5 @@
 function splitmix32(a) {
-    return function() {
+    return function () {
         a |= 0;
         a = a + 0x9e3779b9 | 0;
         let t = a ^ a >>> 16;
@@ -63,50 +63,16 @@ function renderResult(result, idx) {
     if (result.statement.includes("-- plot")) {
         res += '<div id="plot-' + idx + '"></div>'
 
-        uplot_opts = {
-            width: document.getElementById("query-results").clientWidth,
-            height: 300,
-            // title: "Area Fill",
-            tzDate: ts => uPlot.tzDate(new Date(ts * 1e3), 'Etc/UTC'),
-            scales: {
-                x: {
-                    time: false,
-                },
-            },
-            series: []
-        };
+        uplot_opts = uplotOpts()
 
         if (result.statement.includes('-- plot:time')) {
             uplot_opts.scales.x.time = true;
         }
 
-        uplot_data = [];
-        for (let i = 0; i < result.columns.length; i++) {
-            uplot_data.push([]) // Separate vector for each column (X + multiple Y).
-
-            if (i === 0) {
-                uplot_opts.series.push({
-                    label: result.columns[i],
-                })
-            } else {
-                uplot_opts.series.push({
-                    stroke: getDarkColor(),
-                    label: result.columns[i],
-                })
-            }
-        }
-
-        // Sorting data by first column (X axis) ascending.
-        let sortedValues = result.values.sort(function (a, b) {
-            return a[0] - b[0]
-        });
-
-        for (let i in sortedValues) {
-            let item = sortedValues[i]
-
-            for (let j = 0; j < item.length; j++) {
-                uplot_data[j].push(parseFloat(item[j]))
-            }
+        if (result.statement.includes('-- plot:rows')) {
+            uplot_data = uplotRowsData(result, uplot_opts)
+        } else {
+            uplot_data = uplotColumnsData(result, uplot_opts)
         }
     }
 
@@ -125,7 +91,7 @@ function renderResult(result, idx) {
             let item = sortedValues[i]
 
             pie_data.push(
-                { label: item[1], value: parseFloat(item[0]), color: getDarkColor() }
+                {label: item[1], value: parseFloat(item[0]), color: getDarkColor()}
             )
         }
     }
@@ -181,6 +147,162 @@ function renderResult(result, idx) {
         // console.log("Plotting pie", JSON.stringify(pie_data), total, document.getElementById("pie-" + idx))
         drawPieChart(pie_data, total, document.getElementById("pie-" + idx))
     }
+}
+
+function uplotOpts() {
+    return {
+        width: document.getElementById("query-results").clientWidth,
+        height: 300,
+        // title: "Area Fill",
+        tzDate: ts => uPlot.tzDate(new Date(ts * 1e3), 'Etc/UTC'),
+        scales: {
+            x: {
+                time: false,
+            },
+        },
+        series: [],
+        axes: [
+            {},
+            {
+                labelGap: 8,
+                labelSize: 8 + 12 + 8,
+                size(self, values, axisIdx, cycleNum) {
+                    let axis = self.axes[axisIdx];
+
+                    // bail out, force convergence
+                    if (cycleNum > 1)
+                        return axis._size;
+
+                    let axisSize = axis.ticks.size + axis.gap;
+
+                    // find longest value
+                    let longestVal = (values ?? []).reduce((acc, val) => (
+                        val.length > acc.length ? val : acc
+                    ), "");
+
+                    if (longestVal !== "") {
+                        self.ctx.font = axis.font[0];
+                        axisSize += self.ctx.measureText(longestVal).width / devicePixelRatio;
+                    }
+
+                    return Math.ceil(axisSize);
+                },
+            }
+        ],
+    };
+}
+
+/**
+ *
+ * @param {Result} result
+ * @param uplot_opts
+ * @returns {[]}
+ */
+function uplotRowsData(result, uplot_opts) {
+    let uplot_data = [];
+
+    let timedData = {}
+    let labels = {}
+
+    for (let i in result.values) {
+        let value = result.values[i]
+        labels[value[2]] = 1
+
+        let t = value[0]
+        let val = value[1]
+        let label = value[2]
+        if (!timedData[t]) {
+            timedData[t] = {};
+        }
+
+        timedData[t][label] = val
+    }
+
+    // Series for X.
+    uplot_data.push([])
+
+    // Series for Y.
+    let labelsArr = []
+    for (let label in labels) {
+        uplot_data.push([])
+        labelsArr.push(label)
+    }
+    labelsArr = labelsArr.sort()
+
+    for (let t in timedData) {
+        uplot_data[0].push(parseFloat(t))
+    }
+
+    uplot_data[0].sort()
+
+    for (let tt = 0; tt < uplot_data[0].length; tt++) {
+        var values = timedData[uplot_data[0][tt]]
+
+        for (let i = 0; i < labelsArr.length; i++) {
+            let l = labelsArr[i]
+            let val = values[l]
+
+            if (typeof val === 'undefined') {
+                val = null
+            } else {
+                val = parseFloat(val)
+            }
+
+            uplot_data[1 + i].push(val)
+        }
+    }
+
+    uplot_opts.series.push({
+        label: result.columns[0],
+    })
+
+    for (let i = 0; i < labelsArr.length; i++) {
+        uplot_opts.series.push({
+            stroke: getDarkColor(),
+            label: labelsArr[i],
+        })
+    }
+
+    return uplot_data
+}
+
+/**
+ *
+ * @param {Result} result
+ * @param uplot_opts
+ * @returns {[]}
+ */
+function uplotColumnsData(result, uplot_opts) {
+    let uplot_data = [];
+    for (let i = 0; i < result.columns.length; i++) {
+        uplot_data.push([]) // Separate vector for each column (X + multiple Y).
+
+        if (i === 0) {
+            uplot_opts.series.push({
+                label: result.columns[i],
+            })
+        } else {
+            uplot_opts.series.push({
+                stroke: getDarkColor(),
+                label: result.columns[i],
+            })
+        }
+    }
+
+    // Sorting data by first column (X axis) ascending.
+    let sortedValues = result.values.sort(function (a, b) {
+        return a[0] - b[0]
+    });
+
+    for (let i in sortedValues) {
+        let item = sortedValues[i]
+
+        for (let j = 0; j < item.length; j++) {
+            uplot_data[j].push(parseFloat(item[j]))
+        }
+    }
+
+    return uplot_data
 }
 
 /**
