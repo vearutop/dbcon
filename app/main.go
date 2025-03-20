@@ -4,13 +4,18 @@ package app
 import (
 	"context"
 	"database/sql"
+	"encoding/csv"
 	"errors"
 	"flag"
+	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
+	"path"
 	"regexp"
 	"runtime"
 	"strings"
@@ -31,7 +36,7 @@ import (
 )
 
 // Main is the main app function.
-func Main() { //nolint:funlen,cyclop
+func Main() error { //nolint:funlen,cyclop
 	var (
 		listen      string
 		skipBrowser bool
@@ -45,42 +50,68 @@ func Main() { //nolint:funlen,cyclop
 	if flag.NArg() == 0 {
 		println("Usage of dbcon:")
 		println("dbcon [OPTIONS] DB...")
-		println("\tDB can be a path to SQLite file, or a URL with mysql:// or postgres:// scheme. Examples:")
+		println("\tDB can be a path to SQLite/CSV file, or a URL with mysql:// or postgres:// scheme. Examples:")
 		println("\t\tpostgres://user:password@localhost/dbname?sslmode=disable")
 		println("\t\tmysql://user:password@localhost/dbname")
 		println("\t\tsqlite:///my.db")
 		println("\t\tmy.sqlite")
+		println("\t\tmy2.csv")
 		flag.PrintDefaults()
 
-		return
+		return nil
 	}
 
 	sh := graceful.NewSwitch(time.Second)
 
 	listener, err := net.Listen("tcp", listen)
 	if err != nil {
-		log.Println("failed to start server:", err.Error())
-
-		return
+		return fmt.Errorf("failed to start server: %w", err)
 	}
 
-	var instances []dbcon.DBInstance
+	var (
+		instances    []dbcon.DBInstance
+		tempInstance *dbcon.DBInstance
+		tempName     string
+	)
 
 	for _, dsn := range flag.Args() {
+		if strings.HasSuffix(dsn, ".csv") {
+			if tempInstance == nil {
+				tempName = path.Join(os.TempDir(), "dbcon-"+time.Now().Format("2006-01-02-15-04-05")+".sqlite")
+
+				log.Println("using temp db instance:", tempName)
+
+				db, err := sql.Open("sqlite", tempName)
+				if err != nil {
+					return fmt.Errorf("failed to open db: %w", err)
+				}
+
+				tempInstance = &dbcon.DBInstance{
+					Name:     "temp",
+					Dialect:  sqluct.DialectSQLite3,
+					Instance: db,
+				}
+
+				instances = append(instances, *tempInstance)
+			}
+
+			if err := importCSV(tempInstance.Instance, dsn); err != nil {
+				return fmt.Errorf("failed to import CSV: %w", err)
+			}
+
+			continue
+		}
+
 		u, err := url.Parse(dsn)
 		if err != nil {
-			log.Println("failed to parse dsn:", err.Error())
-
-			return
+			return fmt.Errorf("failed to parse dsn: %w", err)
 		}
 
 		switch u.Scheme {
 		case "":
 			db, err := sql.Open("sqlite", dsn)
 			if err != nil {
-				log.Println("failed to open db:", err.Error())
-
-				return
+				return fmt.Errorf("failed to open db: %w", err)
 			}
 
 			instances = append(instances, dbcon.DBInstance{
@@ -91,9 +122,7 @@ func Main() { //nolint:funlen,cyclop
 		case "postgres":
 			db, err := sql.Open("postgres", dsn)
 			if err != nil {
-				log.Println("failed to open db:", err.Error())
-
-				return
+				return fmt.Errorf("failed to open db: %w", err)
 			}
 
 			instances = append(instances, dbcon.DBInstance{
@@ -107,9 +136,7 @@ func Main() { //nolint:funlen,cyclop
 
 			db, err := sql.Open("mysql", d2)
 			if err != nil {
-				log.Println("failed to open db:", err.Error())
-
-				return
+				return fmt.Errorf("failed to open db: %w", err)
 			}
 
 			instances = append(instances, dbcon.DBInstance{
@@ -124,6 +151,14 @@ func Main() { //nolint:funlen,cyclop
 		for dsn, db := range instances {
 			if err := db.Instance.Close(); err != nil {
 				log.Println("failed to close db:", dsn, err.Error())
+			}
+		}
+
+		if tempName != "" {
+			log.Println("removing ", tempName)
+
+			if err := os.RemoveAll(tempName); err != nil {
+				log.Println(err.Error())
 			}
 		}
 	})
@@ -185,6 +220,92 @@ func Main() { //nolint:funlen,cyclop
 	}
 
 	sh.Wait()
+
+	return nil
+}
+
+func importCSV(db *sql.DB, file string) error {
+	f, err := os.Open(file) //nolint:gosec
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Println("failed to close file:", err.Error())
+		}
+	}()
+
+	r := csv.NewReader(f)
+
+	columns, err := r.Read()
+	if err != nil {
+		return err
+	}
+
+	tableName := sqluct.QuoteBackticks(strings.TrimSuffix(path.Base(file), ".csv"))
+	createTable := "CREATE TABLE " + tableName + " ("
+
+	for _, column := range columns {
+		createTable += sqluct.QuoteBackticks(column) + ", "
+	}
+
+	createTable = strings.TrimSuffix(createTable, ", ") + ")"
+
+	_, err = db.Exec(createTable)
+	if err != nil {
+		return err
+	}
+
+	args := make([]any, len(columns))
+	stmt := "INSERT INTO " + tableName + " VALUES (" + strings.TrimSuffix(strings.Repeat("?,", len(columns)), ",") + ")" //nolint:gosec
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+
+	txCnt := 0
+
+	for {
+		record, err := r.Read()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if err != nil {
+			return err
+		}
+
+		for i, v := range record {
+			args[i] = v
+		}
+
+		if _, err := tx.Exec(stmt, args...); err != nil {
+			return err
+		}
+
+		txCnt++
+
+		if txCnt >= 1000 {
+			if err := tx.Commit(); err != nil {
+				return err
+			}
+
+			txCnt = 0
+
+			tx, err = db.Begin()
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // openBrowser opens the specified URL in the default browser of the user.
