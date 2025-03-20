@@ -22,7 +22,7 @@ func addCompletionsFromStringList(list string, sep string, meta string, completi
 
 		completions = append(completions, SQLCompletion{
 			Value: t,
-			Score: 0,
+			Score: 1000,
 			Meta:  meta,
 		})
 	}

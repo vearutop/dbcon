@@ -121,8 +121,8 @@ func DBConsole(deps Deps, prefix string, options ...func(*Options)) usecase.Inte
 
 	completions := map[string][]SQLCompletion{}
 	cmp := []SQLCompletion{
-		{Value: "-- plot:cols", Score: 1000, Meta: "from cols: X, Y1, Y2, ..."},
-		{Value: "-- plot:rows", Score: 1000, Meta: "from rows: X, Y, Label"},
+		{Value: "-- plot:cols", Score: 1000, Meta: "exp cols: X, Y1, Y2, ..."},
+		{Value: "-- plot:rows", Score: 1000, Meta: "exp cols: X, Y, Label"},
 		{Value: "-- plot:time", Score: 1000, Meta: "time series"},
 		{Value: "-- pie", Score: 1000, Meta: "draw pie chart"},
 		{Value: "-- pie:total=X", Score: 1000, Meta: "draw pie chart"},
