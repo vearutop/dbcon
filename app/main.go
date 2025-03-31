@@ -4,6 +4,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/csv"
 	"errors"
 	"flag"
@@ -36,7 +37,7 @@ import (
 )
 
 // Main is the main app function.
-func Main() error { //nolint:funlen,cyclop
+func Main() error { //nolint:funlen,cyclop,maintidx
 	var (
 		listen      string
 		skipBrowser bool
@@ -178,7 +179,28 @@ func Main() error { //nolint:funlen,cyclop
 		return nil
 	}))
 
-	dbcon.Mount(s, "/", dbcon.DefaultDeps(instances))
+	dbcon.Mount(s, "/", dbcon.DefaultDeps(instances), func(options *dbcon.Options) {
+		options.AddValueProcessor("img", func(v any) any {
+			if b, ok := v.([]byte); ok {
+				ct := http.DetectContentType(b)
+
+				return `<img src="data:` + ct + `;base64,` + base64.StdEncoding.EncodeToString(b) + `" />`
+			}
+
+			if s, ok := v.(string); ok {
+				b, err := base64.StdEncoding.DecodeString(s)
+				if err != nil {
+					return err.Error()
+				}
+
+				ct := http.DetectContentType(b)
+
+				return `<img src="data:` + ct + `;base64,` + s + `" />`
+			}
+
+			return v
+		})
+	})
 
 	// Swagger UI endpoint at /docs.
 	s.Docs("/docs", swgui.New)
