@@ -37,7 +37,38 @@ function getDarkColor() {
  * @param {Number} idx
  */
 function renderResult(result, idx) {
-    let res = '<pre>' + result.statement + '</pre>'
+    var desc = result.statement
+    var res = ""
+
+    // Header.
+    if (desc.includes("-- #")) {
+        let h = desc.match(/-- #(.+)/)
+        if (h && h[1]) {
+            res += '<h2>' + h[1].trim() + '</h2>'
+        }
+    }
+
+    // Description.
+    if (desc.includes("-- >")) {
+        var b = ""
+        let d = desc.matchAll(/-- >(.+)/g)
+        for (var l of d) {
+            if (l[1].trim()) {
+                b += '<p>' + l[1].trim() + '</p>'
+            }
+        }
+
+        if (b) {
+            res += b
+        }
+    }
+
+    var strip = desc.includes("-- strip")
+
+    if (!strip) {
+        res += '<pre>' + result.statement + '</pre>'
+    }
+
 
     if (result.error) {
         res += '<p>' + result.error + '</p>';
@@ -47,14 +78,16 @@ function renderResult(result, idx) {
     }
 
     var rowsCnt = 0
-    if (result.values) {
+    if (result.values && !strip) {
         if (!isPortableReport) {
             res += '<a href="/query-db.csv?instance=' + encodeURIComponent(result.instance) + '&statement=' + encodeURIComponent(result.statement) + '" style="margin-bottom: 10px" class="btn btn-info" target="_blank">Download CSV</a> '
         }
 
         rowsCnt = result.values.length
     }
-    res += '<span>Rows: ' + rowsCnt + ', elapsed: ' + result.elapsed + '</span>\n'
+    if (!strip) {
+        res += '<span>Rows: ' + rowsCnt + ', elapsed: ' + result.elapsed + '</span>\n'
+    }
 
     let uplot_opts = null;
     let uplot_data = null;

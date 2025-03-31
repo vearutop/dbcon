@@ -121,11 +121,14 @@ func DBConsole(deps Deps, prefix string, options ...func(*Options)) usecase.Inte
 
 	completions := map[string][]SQLCompletion{}
 	cmp := []SQLCompletion{
-		{Value: "-- plot:cols", Score: 1000, Meta: "exp cols: X, Y1, Y2, ..."},
-		{Value: "-- plot:rows", Score: 1000, Meta: "exp cols: X, Y, Label"},
+		{Value: "-- plot:cols", Score: 1000, Meta: "exp cols: x, y1, y2, ..."},
+		{Value: "-- plot:rows", Score: 1000, Meta: "exp cols: x, y, label"},
 		{Value: "-- plot:time", Score: 1000, Meta: "time series"},
-		{Value: "-- pie", Score: 1000, Meta: "draw pie chart"},
-		{Value: "-- pie:total=X", Score: 1000, Meta: "draw pie chart"},
+		{Value: "-- pie", Score: 1000, Meta: "exp cols: count, label"},
+		{Value: "-- pie:total=X", Score: 1000, Meta: "override total count"},
+		{Value: "-- strip", Score: 1000, Meta: "render data only"},
+		{Value: "-- # ", Score: 1000, Meta: "add header"},
+		{Value: "-- > ", Score: 1000, Meta: "add description"},
 	}
 
 	cmp = append(cmp, o.Completions...)
@@ -198,6 +201,10 @@ renderColumnsDirectory();
 		qr, err := decodeForm(in.Form)
 		if err != nil {
 			return err
+		}
+
+		if in.Form != "" {
+			p.AppendHTML += `<script>$(function(){$('#schema-form-0').submit();})</script>`
 		}
 
 		if len(qr.Queries) == 0 {
