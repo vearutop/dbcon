@@ -184,6 +184,18 @@ function renderColumnsDirectory() {
     });
 }
 
+function fixStatementAI(resultIdx) {
+    var result = results[resultIdx]
+
+    $('#columns-directory table').hide();
+    $('#form-container-ask-ai').addClass('visible');
+
+    $('#form-container-ask-ai textarea').val("```\n" + result.statement + "\n```\nfailed with\n```\n"+result.error+"\n```\n\nPlease fix or explain the error.")
+    $('#form-container-ask-ai select').val(result.instance);
+
+    return false
+}
+
 function toggleAskAI() {
     $('#columns-directory table').hide();
     $('#form-container-ask-ai').toggleClass('visible');
