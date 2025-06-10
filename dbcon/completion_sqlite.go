@@ -8,7 +8,7 @@ import (
 )
 
 // SqliteCompletions returns keywords, functions, tables and columns as code completions.
-func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
+func SqliteCompletions(db *sql.DB) (_ []SQLCompletion, promptBase string) { //nolint:maintidx
 	//nolint:prealloc
 	var (
 		completions []SQLCompletion
@@ -16,11 +16,13 @@ func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
 	)
 
 	res := makeResult(context.Background(), db, "",
-		"select tbl_name from sqlite_master where type='table' and tbl_name != 'sqlite_sequence';", Options{})
+		"select tbl_name, sql from sqlite_master where type='table' and tbl_name != 'sqlite_sequence';", Options{})
 
 	if len(res.Values) == 0 {
-		return completions
+		return completions, ""
 	}
+
+	createTables := ""
 
 	for _, row := range res.Values {
 		table, ok := row[0].(string)
@@ -28,11 +30,18 @@ func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
 			continue
 		}
 
+		createTable, ok := row[1].(string)
+		if !ok {
+			continue
+		}
+
+		createTables += createTable + ";\n"
+
 		completions = append(completions, SQLCompletion{
-			Value: sqluct.QuoteBackticks(table),
+			Value: sqluct.QuoteRequiredBackticks(table),
 			Score: 10000,
 			Meta:  "table",
-			Table: sqluct.QuoteBackticks(table),
+			Table: sqluct.QuoteRequiredBackticks(table),
 		})
 
 		tables = append(tables, table)
@@ -56,11 +65,11 @@ func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
 			}
 
 			completions = append(completions, SQLCompletion{
-				Value:  sqluct.QuoteBackticks(column),
+				Value:  sqluct.QuoteRequiredBackticks(column),
 				Score:  20000,
-				Meta:   sqluct.QuoteBackticks(table),
-				Table:  sqluct.QuoteBackticks(table),
-				Column: sqluct.QuoteBackticks(column),
+				Meta:   sqluct.QuoteRequiredBackticks(table),
+				Table:  sqluct.QuoteRequiredBackticks(table),
+				Column: sqluct.QuoteRequiredBackticks(column),
 			})
 		}
 	}
@@ -389,5 +398,8 @@ func SqliteCompletions(db *sql.DB) []SQLCompletion { //nolint:maintidx
     json_tree(json)
     json_tree(json,path)`, "\n", "json-func", completions)
 
-	return completions
+	promptBase = "Given the following SQLite database schema, answer my next question with SQL statement, " +
+		"only use columns defined in the schema:\n " + createTables + "\n\n"
+
+	return completions, promptBase
 }

@@ -23,15 +23,10 @@ type dbQuery struct {
 type instance string
 
 func (i instance) Enum() (res []any) {
-	if len(i) > 0 {
-		instances := strings.Split(string(i), ",")
-		for _, instance := range instances {
-			res = append(res, instance)
-		}
-	}
-
-	return res
+	return instancesEnum
 }
+
+var instancesEnum []any
 
 // QueryRequest is a list of queries.
 type QueryRequest struct {

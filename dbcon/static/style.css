@@ -54,3 +54,12 @@
     border: 1px solid #ddd;
     resize: both;
 }
+
+#form-container-ask-ai {
+    visibility: hidden;
+    padding-top: 20px !important;
+}
+
+#form-container-ask-ai.visible {
+    visibility: visible;
+}

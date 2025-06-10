@@ -148,6 +148,8 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		}
 	}
 
+	// dbcon.DefaultDeps()
+
 	sh.OnShutdown("close_db", func() {
 		for dsn, db := range instances {
 			if err := db.Instance.Close(); err != nil {
@@ -179,6 +181,7 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		return nil
 	}))
 
+	dbcon.PrepareInstances(instances)
 	dbcon.Mount(s, "/", dbcon.DefaultDeps(instances), func(options *dbcon.Options) {
 		options.AddValueProcessor("img", func(v any) any {
 			if b, ok := v.([]byte); ok {
@@ -233,7 +236,7 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		}
 	}
 
-	log.Println("http://" + addr)
+	log.Println("http://"+addr, "API Docs:", "http://"+addr+"/docs/")
 
 	if !skipBrowser {
 		if err := openBrowser("http://" + addr); err != nil && !strings.Contains(err.Error(), "executable file not found") {

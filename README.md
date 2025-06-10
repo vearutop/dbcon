@@ -72,4 +72,13 @@ First column is used for the numeric value of pie slice, second is a label.
 
 Pie total is calculated as sum of all values, for cases of partial pie you can provide the total with `-- pie:total=123`.
 
+## AI Assistance
+
+LLM can help to translate a query in natural language into SQL. You can enable LLM support by configuring credentials
+in environment variables.
+
+* `DBCON_OPENAI_KEY=<API_KEY>` for ChatGPT
+* `DBCON_GEMINI_API_KEY=<API_KEY>` for Google Gemini
+* `DBCON_OLLAMA_MODEL=deepseek-r1:32b` for local Ollama model
+
 ![Example](dbcon.png)
