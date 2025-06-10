@@ -148,8 +148,6 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		}
 	}
 
-	// dbcon.DefaultDeps()
-
 	sh.OnShutdown("close_db", func() {
 		for dsn, db := range instances {
 			if err := db.Instance.Close(); err != nil {
