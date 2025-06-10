@@ -69,11 +69,11 @@ function renderResult(result, idx) {
         res += '<pre>' + result.statement + '</pre>'
     }
 
-
     if (result.error) {
-        res += '<p>' + result.error + '</p>';
+        res += '<p><a class="ai btn btn-info" onclick="return fixStatementAI('+idx+')">Fix 🤖</a> <code>' + result.error + '</code></p>';
 
         $('#query-results').append('<div>' + res + '</div>')
+
         return
     }
 
