@@ -123,8 +123,6 @@ function onPromptSuccess(x) {
 
     var response = JSON.parse(x.responseText)
 
-    // console.log("prompt response", response)
-
     $('#form-result-ask-ai').html(response.message).show()
 }
 
