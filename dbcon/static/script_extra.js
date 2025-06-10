@@ -115,6 +115,18 @@ function onQuerySQLSuccess(x) {
     renderResults();
 }
 
+/**
+ * @param {XMLHttpRequest} x
+ */
+function onPromptSuccess(x) {
+    console.log(x.responseText)
+
+    var response = JSON.parse(x.responseText)
+
+    $('#form-result-ask-ai').html(response.message).show()
+}
+
+
 function onQuerySQLBeforeSubmit(values) {
     $("#link-form").hide()
     $("#download-report").hide()
@@ -163,9 +175,7 @@ function renderColumnsDirectory() {
     res += rows
     res += "</tbody></table>"
 
-    $('#form-title-0').parent().parent().append('<div id="columns-directory" class="pure-u-2-5" style="position: absolute;margin-top: 4em;"></div>')
-
-    $('#columns-directory').html('<div class="btn btn-info" onclick="$(this).next().toggle();return false;">Columns Directory</div>' + res)
+    $('#columns-directory').html('<div class="btn btn-info" onclick="return toggleColumnsDirectory();">Columns Directory</div>' + res)
     $('#columns-directory table').fancyTable({
         sortable: true,
         searchable: true,
@@ -174,6 +184,17 @@ function renderColumnsDirectory() {
     });
 }
 
+function toggleAskAI() {
+    $('#columns-directory table').hide();
+    $('#form-container-ask-ai').toggleClass('visible');
+    return false;
+}
+
+function toggleColumnsDirectory() {
+    $('#form-container-ask-ai').removeClass('visible');
+    $('#columns-directory table').toggle();
+    return false;
+}
 
 window.jsonform_ace_setup = function(setup){
     setup()

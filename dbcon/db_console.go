@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/andybalholm/brotli"
@@ -18,6 +19,9 @@ import (
 	"github.com/swaggest/rest/response"
 	"github.com/swaggest/usecase"
 	"github.com/swaggest/usecase/status"
+	"github.com/vearutop/dbcon/internal/llm/gemini"
+	"github.com/vearutop/dbcon/internal/llm/ollama"
+	"github.com/vearutop/dbcon/internal/llm/openai"
 )
 
 // Options defines DBCon customizable params.
@@ -43,17 +47,27 @@ type DBInstance struct {
 	Dialect     sqluct.Dialect
 	Instance    *sql.DB
 	Completions []SQLCompletion
+	PromptBase  string // Prompt with available tables and columns.
+
+	prepared bool
 }
 
-// Deps describes required resources.
+// Deps defines required resources.
 type Deps interface {
 	SchemaRepository() *jsonform.Repository
 	DBInstances() []DBInstance
+	Prompter() Prompter
+}
+
+// Prompter defines LLM service to ask questions about SQL.
+type Prompter interface {
+	Prompt(ctx context.Context, prompt string) (string, error)
 }
 
 type dependencies struct {
 	form      *jsonform.Repository
 	instances []DBInstance
+	prompter  Prompter
 }
 
 func (d dependencies) SchemaRepository() *jsonform.Repository {
@@ -64,12 +78,50 @@ func (d dependencies) DBInstances() []DBInstance {
 	return d.instances
 }
 
+func (d dependencies) Prompter() Prompter {
+	return d.prompter
+}
+
+// PrepareInstances makes prepares DB instances for completions and UI.
+func PrepareInstances(instances []DBInstance) {
+	instancesEnum = nil
+
+	for i, v := range instances {
+		instancesEnum = append(instancesEnum, v.Name)
+
+		if v.prepared {
+			continue
+		}
+
+		switch v.Dialect { //nolint:exhaustive
+		case sqluct.DialectSQLite3:
+			cmp, promptBase := SqliteCompletions(v.Instance)
+			v.Completions = append(v.Completions, cmp...)
+			v.PromptBase = promptBase
+		case sqluct.DialectPostgres:
+			v.Completions = append(v.Completions, PostgresCompletions(v.Instance)...)
+		}
+
+		instances[i] = v
+	}
+}
+
 // DefaultDeps prepares dependencies from DB instances.
 func DefaultDeps(instances []DBInstance) Deps {
-	return &dependencies{
+	deps := &dependencies{
 		form:      jsonform.NewRepository(&jsonschema.Reflector{}),
 		instances: instances,
 	}
+
+	if ollamaModel := os.Getenv("DBCON_OLLAMA_MODEL"); ollamaModel != "" {
+		deps.prompter = &ollama.Prompter{Model: ollamaModel}
+	} else if authKey := os.Getenv("DBCON_GEMINI_API_KEY"); authKey != "" {
+		deps.prompter = &gemini.Prompter{AuthKey: authKey}
+	} else if authKey := os.Getenv("DBCON_OPENAI_KEY"); authKey != "" {
+		deps.prompter = &openai.Prompter{AuthKey: authKey}
+	}
+
+	return deps
 }
 
 func decodeForm(b string) (qr QueryRequest, err error) {
@@ -138,13 +190,6 @@ func DBConsole(deps Deps, prefix string, options ...func(*Options)) usecase.Inte
 	}
 
 	for _, v := range deps.DBInstances() {
-		switch v.Dialect { //nolint:exhaustive
-		case sqluct.DialectSQLite3:
-			v.Completions = append(v.Completions, SqliteCompletions(v.Instance)...)
-		case sqluct.DialectPostgres:
-			v.Completions = append(v.Completions, PostgresCompletions(v.Instance)...)
-		}
-
 		completions[v.Name] = append(v.Completions, cmp...)
 	}
 
@@ -189,41 +234,49 @@ renderColumnsDirectory();
 </div>
 `
 
-		instances := ""
-		for _, v := range deps.DBInstances() {
-			instances += "," + v.Name
-		}
-
-		if instances != "" {
-			instances = instances[1:]
-		}
-
 		qr, err := decodeForm(in.Form)
 		if err != nil {
 			return err
 		}
 
 		if in.Form != "" {
-			p.AppendHTML += `<script>$(function(){$('#schema-form-0').submit();})</script>`
+			p.AppendHTML += `<script>$(function(){$('#schema-form-queries').submit();})</script>`
 		}
 
 		if len(qr.Queries) == 0 {
-			qr.Queries = []dbQuery{{Instance: instance(instances)}}
+			qr.Queries = []dbQuery{{}}
 		}
 
-		return deps.SchemaRepository().Render(out.ResponseWriter(), p,
-			jsonform.Form{
-				Title:             "DB Console",
-				SubmitURL:         prefix + "query-db",
-				SubmitMethod:      http.MethodPost,
-				SubmitText:        "Query",
-				SuccessStatus:     http.StatusOK,
-				Value:             qr,
-				OnSuccess:         `onQuerySQLSuccess`,
-				OnBeforeSubmit:    `onQuerySQLBeforeSubmit`,
-				OnRequestFinished: `onQuerySQLFinished`,
-			},
-		)
+		queriesForm := jsonform.Form{
+			Name:              "queries",
+			Title:             "DB Console",
+			SubmitURL:         prefix + "query-db",
+			SubmitMethod:      http.MethodPost,
+			SubmitText:        "Query",
+			SuccessStatus:     http.StatusOK,
+			Value:             qr,
+			OnSuccess:         `onQuerySQLSuccess`,
+			OnBeforeSubmit:    `onQuerySQLBeforeSubmit`,
+			OnRequestFinished: `onQuerySQLFinished`,
+		}
+
+		askAIForm := jsonform.Form{
+			Name:         "ask-ai",
+			SubmitURL:    prefix + "prompt",
+			SubmitMethod: http.MethodPost,
+			SubmitText:   "Send",
+			Value:        promptRequest{},
+			OnSuccess:    `onPromptSuccess`,
+			BeforeForm:   `<div id="columns-directory" class="pure-u-2-5" style="position: absolute"></div><div style="position: absolute;margin-left: 160px" class="btn btn-info" onclick="return toggleAskAI();">Ask AI 🤖</div>`,
+		}
+
+		if deps.Prompter() != nil {
+			askAIForm.BeforeForm = `<div id="columns-directory" class="pure-u-2-5" style="position: absolute"></div><div style="position: absolute;margin-left: 160px" class="btn btn-info" onclick="return toggleAskAI();">Ask AI 🤖</div>`
+		} else {
+			askAIForm.BeforeForm = `<div id="columns-directory" class="pure-u-2-5" style="position: absolute"></div>`
+		}
+
+		return deps.SchemaRepository().Render(out.ResponseWriter(), p, queriesForm, askAIForm)
 	})
 
 	u.SetExpectedErrors(status.Unknown, status.InvalidArgument)
