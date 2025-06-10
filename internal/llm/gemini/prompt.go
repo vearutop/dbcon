@@ -128,8 +128,6 @@ func (ip *Prompter) Prompt(ctx context.Context, prompt string) (string, error) {
 		return "", err
 	}
 
-	// println(string(body))
-
 	r, err := http.NewRequestWithContext(ctx,
 		http.MethodPost,
 		"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key="+ip.AuthKey,
