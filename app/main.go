@@ -445,11 +445,13 @@ func basicAuthMW(realm string, userPass string) func(next http.Handler) http.Han
 			user, pass, ok := r.BasicAuth()
 			if !ok {
 				basicAuthFailed(w, realm)
+
 				return
 			}
 
 			if user+":"+pass != userPass {
 				basicAuthFailed(w, realm)
+
 				return
 			}
 
