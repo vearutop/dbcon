@@ -13,14 +13,14 @@ import (
 // Prompter can ask LLM about DB.
 type Prompter struct {
 	BaseURL   string            // default "http://localhost:11434/api/generate".
-	Model     string            // default "deepseek-r1:32b".
+	Model     string            // default "codegemma:7b".
 	Transport http.RoundTripper // default http.DefaultTransport.
 }
 
 // ModelName returns the name of LLM.
 func (ip *Prompter) ModelName() string {
 	if ip.Model == "" {
-		return "deepseek-r1:32b"
+		return "codegemma:7b"
 	}
 
 	return ip.Model
@@ -41,7 +41,7 @@ func (ip *Prompter) Prompt(ctx context.Context, prompt string) (string, error) {
 	r.Stream = false
 
 	if r.Model == "" {
-		r.Model = "deepseek-r1:32b"
+		r.Model = "codegemma:7b"
 	}
 
 	body, err := json.Marshal(r)
@@ -59,8 +59,6 @@ func (ip *Prompter) Prompt(ctx context.Context, prompt string) (string, error) {
 		return "", err
 	}
 
-	println("sending request")
-
 	tr := ip.Transport
 	if tr == nil {
 		tr = http.DefaultTransport
@@ -77,8 +75,6 @@ func (ip *Prompter) Prompt(ctx context.Context, prompt string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	println("RESP", string(cont))
 
 	type Resp struct {
 		Response string `json:"response"`

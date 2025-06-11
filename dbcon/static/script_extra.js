@@ -126,19 +126,23 @@ function onPromptSuccess(x) {
     $('#form-result-ask-ai').html(response.message).show()
 }
 
+function onPromptBeforeSubmit() {
+    $('#form-result-ask-ai').addClass("spinner").html("<span style='font-size: 15px'>loading...</span>").show()
+}
 
-function onQuerySQLBeforeSubmit(values) {
+function onPromptFinished() {
+    $('#form-result-ask-ai').removeClass("spinner")
+}
+
+function onQuerySQLBeforeSubmit() {
     $("#link-form").hide()
     $("#download-report").hide()
 
-
-    $('#form-title-0').addClass("spinner")
-
-    $('#query-result').html("<tr><td>Running query:</td></tr><tr><td>" + values.statement + "</td></tr>")
+    $('#form-result-queries').addClass("spinner").html("<span style='font-size: 15px'>loading...</span>").show()
 }
 
 function onQuerySQLFinished() {
-    $('#form-title-0').removeClass("spinner")
+    $('#form-result-queries').removeClass("spinner").hide()
 }
 
 var completions = {}

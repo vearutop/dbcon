@@ -261,13 +261,15 @@ renderColumnsDirectory();
 		}
 
 		askAIForm := jsonform.Form{
-			Name:         "ask-ai",
-			SubmitURL:    prefix + "prompt",
-			SubmitMethod: http.MethodPost,
-			SubmitText:   "Send",
-			Value:        promptRequest{},
-			OnSuccess:    `onPromptSuccess`,
-			BeforeForm:   `<div id="columns-directory" class="pure-u-2-5" style="position: absolute"></div><div style="position: absolute;margin-left: 160px" class="ai btn btn-info" onclick="return toggleAskAI();">Ask AI 🤖</div>`,
+			Name:              "ask-ai",
+			SubmitURL:         prefix + "prompt",
+			SubmitMethod:      http.MethodPost,
+			SubmitText:        "Send",
+			Value:             promptRequest{},
+			OnSuccess:         `onPromptSuccess`,
+			OnBeforeSubmit:    `onPromptBeforeSubmit`,
+			OnRequestFinished: `onPromptFinished`,
+			BeforeForm:        `<div id="columns-directory" class="pure-u-2-5" style="position: absolute"></div><div style="position: absolute;margin-left: 160px" class="ai btn btn-info" onclick="return toggleAskAI();">Ask AI 🤖</div>`,
 		}
 
 		if deps.Prompter() == nil {
