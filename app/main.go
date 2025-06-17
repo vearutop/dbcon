@@ -19,6 +19,7 @@ import (
 	"path"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,11 +43,13 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		listen      string
 		skipBrowser bool
 		basicAuth   string
+		tables      string
 	)
 
 	flag.StringVar(&listen, "listen", "127.0.0.1:0", "listen address, port 0 picks a free random port")
 	flag.BoolVar(&skipBrowser, "s", false, "skip browser opening")
 	flag.StringVar(&basicAuth, "auth", "", "basic auth as user:password")
+	flag.StringVar(&tables, "tables", "", "comma-separated list table names to use for completion and AI")
 
 	flag.Parse()
 
@@ -185,7 +188,11 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		return nil
 	}))
 
-	dbcon.PrepareInstances(instances)
+	dbcon.PrepareInstances(instances, func(o *dbcon.Options) {
+		if tables != "" {
+			o.TableNames = strings.Split(tables, ",")
+		}
+	})
 	dbcon.Mount(s, "/", dbcon.DefaultDeps(instances), func(options *dbcon.Options) {
 		options.AddValueProcessor("img", func(v any) any {
 			if b, ok := v.([]byte); ok {
@@ -203,6 +210,23 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 				ct := http.DetectContentType(b)
 
 				return `<img src="data:` + ct + `;base64,` + s + `" />`
+			}
+
+			return v
+		})
+
+		options.AddValueProcessor("base36", func(v any) any {
+			if b, ok := v.(int64); ok {
+				return strconv.FormatInt(b, 36)
+			}
+
+			if b, ok := v.(string); ok {
+				i, err := strconv.ParseInt(b, 36, 64)
+				if err == nil {
+					return i
+				}
+
+				return err.Error()
 			}
 
 			return v

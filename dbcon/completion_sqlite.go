@@ -8,12 +8,25 @@ import (
 )
 
 // SqliteCompletions returns keywords, functions, tables and columns as code completions.
-func SqliteCompletions(db *sql.DB) (_ []SQLCompletion, promptBase string) { //nolint:maintidx
+func SqliteCompletions(db *sql.DB, options ...func(o *Options)) (_ []SQLCompletion, promptBase string) { //nolint:maintidx
 	//nolint:prealloc
 	var (
 		completions []SQLCompletion
 		tables      []string
 	)
+
+	opt := &Options{}
+	for _, option := range options {
+		option(opt)
+	}
+
+	var tableNames map[string]bool
+	if len(opt.TableNames) > 0 {
+		tableNames = make(map[string]bool)
+		for _, table := range opt.TableNames {
+			tableNames[table] = true
+		}
+	}
 
 	res := makeResult(context.Background(), db, "",
 		"select tbl_name, sql from sqlite_master where type='table' and tbl_name != 'sqlite_sequence';", Options{})
@@ -27,6 +40,10 @@ func SqliteCompletions(db *sql.DB) (_ []SQLCompletion, promptBase string) { //no
 	for _, row := range res.Values {
 		table, ok := row[0].(string)
 		if !ok {
+			continue
+		}
+
+		if len(tableNames) > 0 && !tableNames[table] {
 			continue
 		}
 
@@ -48,6 +65,10 @@ func SqliteCompletions(db *sql.DB) (_ []SQLCompletion, promptBase string) { //no
 	}
 
 	for _, table := range tables {
+		if len(tableNames) > 0 && !tableNames[table] {
+			continue
+		}
+
 		res = makeResult(context.Background(), db, "", "PRAGMA table_info("+sqluct.QuoteBackticks(table)+");", Options{})
 
 		if len(res.Values) == 0 {

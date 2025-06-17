@@ -28,6 +28,9 @@ import (
 type Options struct {
 	Completions []SQLCompletion
 
+	// TableNames limits the tables to use in completions, all tables are used if empty.
+	TableNames []string
+
 	// valueProcessor is map of function name to processor function.
 	valueProcessor map[string]func(any) any
 }
@@ -83,7 +86,7 @@ func (d dependencies) Prompter() Prompter {
 }
 
 // PrepareInstances makes prepares DB instances for completions and UI.
-func PrepareInstances(instances []DBInstance) {
+func PrepareInstances(instances []DBInstance, options ...func(o *Options)) {
 	instancesEnum = nil
 
 	for i, v := range instances {
@@ -95,11 +98,13 @@ func PrepareInstances(instances []DBInstance) {
 
 		switch v.Dialect { //nolint:exhaustive
 		case sqluct.DialectSQLite3:
-			cmp, promptBase := SqliteCompletions(v.Instance)
+			cmp, promptBase := SqliteCompletions(v.Instance, options...)
 			v.Completions = append(v.Completions, cmp...)
 			v.PromptBase = promptBase
 		case sqluct.DialectPostgres:
-			v.Completions = append(v.Completions, PostgresCompletions(v.Instance)...)
+			cmp, promptBase := PostgresCompletions(v.Instance, options...)
+			v.Completions = append(v.Completions, cmp...)
+			v.PromptBase = promptBase
 		}
 
 		instances[i] = v
