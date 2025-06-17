@@ -5,8 +5,8 @@ go 1.23.0
 require (
 	github.com/andybalholm/brotli v1.1.1
 	github.com/bool64/dev v0.2.40
-	github.com/bool64/sqluct v0.2.5
-	github.com/go-sql-driver/mysql v1.9.2
+	github.com/bool64/sqluct v0.2.6
+	github.com/go-sql-driver/mysql v1.9.3
 	github.com/lib/pq v1.10.9
 	github.com/stretchr/testify v1.10.0
 	github.com/swaggest/jsonform-go v0.2.6

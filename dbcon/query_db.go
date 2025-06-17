@@ -191,6 +191,10 @@ func makeResult(ctx context.Context, db *sql.DB, instance, statement string, o O
 			if iv, ok := v.(int64); ok {
 				values[i] = strconv.Itoa(int(iv))
 			}
+
+			if bv, ok := v.([]byte); ok {
+				values[i] = string(bv)
+			}
 		}
 
 		result.Values = append(result.Values, values)
