@@ -11,6 +11,14 @@ Web-based SQL console to SQLite, MySQL and Postgres.
 
 ## Install
 
+### Macos Brew
+
+```
+brew tap vearutop/tools && brew update && brew install dbcon
+```
+
+### Go Install
+
 ```
 go install github.com/vearutop/dbcon@latest
 $(go env GOPATH)/bin/dbcon --help
