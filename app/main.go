@@ -34,6 +34,7 @@ import (
 	"github.com/swaggest/usecase"
 	"github.com/vearutop/dbcon/dbcon"
 	"github.com/vearutop/dbcon/internal/graceful"
+	"github.com/vearutop/flatjsonl/flatjsonl"
 	_ "modernc.org/sqlite" // DB driver.
 )
 
@@ -56,12 +57,14 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 	if flag.NArg() == 0 {
 		println("Usage of dbcon:")
 		println("dbcon [OPTIONS] DB...")
-		println("\tDB can be a path to SQLite/CSV file, or a URL with mysql:// or postgres:// scheme. Examples:")
+		println("\tDB can be a path to SQLite/CSV/JSONL file, or a URL with mysql:// or postgres:// scheme. Examples:")
 		println("\t\tpostgres://user:password@localhost/dbname?sslmode=disable")
 		println("\t\tmysql://user:password@localhost/dbname")
 		println("\t\tsqlite:///my.db")
 		println("\t\tmy.sqlite")
 		println("\t\tmy2.csv")
+		println("\t\tmy3.jsonl")
+		println("\t\tmy4.log")
 		flag.PrintDefaults()
 
 		return nil
@@ -80,29 +83,63 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		tempName     string
 	)
 
+	ensureTempInstance := func() error {
+		if tempInstance != nil {
+			return nil
+		}
+
+		tempName = path.Join(os.TempDir(), "dbcon-"+time.Now().Format("2006-01-02-15-04-05")+".sqlite")
+
+		log.Println("using temp db instance:", tempName)
+
+		db, err := sql.Open("sqlite", tempName)
+		if err != nil {
+			return fmt.Errorf("failed to open db: %w", err)
+		}
+
+		tempInstance = &dbcon.DBInstance{
+			Name:     "temp",
+			Dialect:  sqluct.DialectSQLite3,
+			Instance: db,
+		}
+
+		instances = append(instances, *tempInstance)
+
+		return nil
+	}
+
 	for _, dsn := range flag.Args() {
 		if strings.HasSuffix(dsn, ".csv") {
-			if tempInstance == nil {
-				tempName = path.Join(os.TempDir(), "dbcon-"+time.Now().Format("2006-01-02-15-04-05")+".sqlite")
-
-				log.Println("using temp db instance:", tempName)
-
-				db, err := sql.Open("sqlite", tempName)
-				if err != nil {
-					return fmt.Errorf("failed to open db: %w", err)
-				}
-
-				tempInstance = &dbcon.DBInstance{
-					Name:     "temp",
-					Dialect:  sqluct.DialectSQLite3,
-					Instance: db,
-				}
-
-				instances = append(instances, *tempInstance)
+			if err := ensureTempInstance(); err != nil {
+				return err
 			}
 
 			if err := importCSV(tempInstance.Instance, dsn); err != nil {
 				return fmt.Errorf("failed to import CSV: %w", err)
+			}
+
+			continue
+		}
+
+		if strings.HasSuffix(dsn, ".jsonl") || strings.HasSuffix(dsn, ".log") {
+			println("importing", dsn, "as jsonl...")
+
+			if err := ensureTempInstance(); err != nil {
+				return err
+			}
+
+			f := flatjsonl.Flags{}
+			f.Input = dsn
+			f.SQLite = tempName
+			f.SQLTable = strings.TrimSuffix(strings.TrimSuffix(path.Base(dsn), ".jsonl"), ".log")
+
+			proc, err := flatjsonl.New(f)
+			if err != nil {
+				return fmt.Errorf("failed to import jsonl: %w", err)
+			}
+
+			if err := proc.Process(); err != nil {
+				return fmt.Errorf("failed to process jsonl: %w", err)
 			}
 
 			continue

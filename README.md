@@ -55,15 +55,21 @@ codesign -s - ./dbcon
 ```
 Usage of dbcon:
 dbcon [OPTIONS] DB...
-        DB can be a path to SQLite/CSV file, or a URL with mysql:// or postgres:// scheme. Examples:
+        DB can be a path to SQLite/CSV/JSONL file, or a URL with mysql:// or postgres:// scheme. Examples:
                 postgres://user:password@localhost/dbname?sslmode=disable
                 mysql://user:password@localhost/dbname
                 sqlite:///my.db
                 my.sqlite
                 my2.csv
+                my3.jsonl
+                my4.log
+  -auth string
+        basic auth as user:password
   -listen string
         listen address, port 0 picks a free random port (default "127.0.0.1:0")
   -s    skip browser opening
+  -tables string
+        comma-separated list table names to use for completion and AI
 ```
 
 Multiple statements can be separated with `;`.
