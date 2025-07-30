@@ -38,6 +38,9 @@ import (
 	_ "modernc.org/sqlite" // DB driver.
 )
 
+// DefaultListenAddress allows custom control.
+var DefaultListenAddress = "127.0.0.1:0"
+
 // Main is the main app function.
 func Main() error { //nolint:funlen,cyclop,maintidx
 	var (
@@ -47,7 +50,7 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		tables      string
 	)
 
-	flag.StringVar(&listen, "listen", "127.0.0.1:0", "listen address, port 0 picks a free random port")
+	flag.StringVar(&listen, "listen", DefaultListenAddress, "listen address, port 0 picks a free random port")
 	flag.BoolVar(&skipBrowser, "s", false, "skip browser opening")
 	flag.StringVar(&basicAuth, "auth", "", "basic auth as user:password")
 	flag.StringVar(&tables, "tables", "", "comma-separated list table names to use for completion and AI")
@@ -121,7 +124,11 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 			continue
 		}
 
-		if strings.HasSuffix(dsn, ".jsonl") || strings.HasSuffix(dsn, ".log") {
+		fn := strings.TrimSuffix(dsn, ".zst")
+		fn = strings.TrimSuffix(fn, ".gz")
+
+		if strings.HasSuffix(fn, ".jsonl") ||
+			strings.HasSuffix(fn, ".log") {
 			println("importing", dsn, "as jsonl...")
 
 			if err := ensureTempInstance(); err != nil {
@@ -129,18 +136,34 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 			}
 
 			f := flatjsonl.Flags{}
-			f.Input = dsn
 			f.SQLite = tempName
 			f.SQLTable = strings.TrimSuffix(strings.TrimSuffix(path.Base(dsn), ".jsonl"), ".log")
+			f.ProgressInterval = 5 * time.Second
+			f.ChildrenLimitObject = 100
+			f.SQLMaxCols = 2000
+			f.Verbosity = 2
+			f.Concurrency = 2 * runtime.NumCPU()
+			f.MemLimit = 1000
+			f.BufSize = 1e7
 
-			proc, err := flatjsonl.New(f)
+			if _, err := exec.LookPath("sqlite3"); err == nil {
+				println("importing with sqlite3 CLI")
+
+				f.SQLiteCLI = true
+			}
+
+			proc, err := flatjsonl.NewProcessor(f, flatjsonl.Config{}, flatjsonl.Input{FileName: dsn})
 			if err != nil {
 				return fmt.Errorf("failed to import jsonl: %w", err)
 			}
 
+			st := time.Now()
+
 			if err := proc.Process(); err != nil {
 				return fmt.Errorf("failed to process jsonl: %w", err)
 			}
+
+			println("import completed in", time.Since(st).String())
 
 			continue
 		}
@@ -289,6 +312,7 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 	}()
 
 	addr := listener.Addr().String()
+	port := listener.Addr().(*net.TCPAddr).Port //nolint:errcheck
 
 	if strings.HasPrefix(listen, ":") {
 		m, err := interfaces(false)
@@ -296,12 +320,12 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 			log.Println("find network interfaces:", err)
 		} else {
 			for _, v := range m {
-				addr = v + listen
+				addr = v + ":" + strconv.Itoa(port)
 			}
 		}
 	}
 
-	log.Println("http://"+addr, "API Docs:", "http://"+addr+"/docs/")
+	log.Println("Console available at http://" + addr)
 
 	if !skipBrowser {
 		if err := openBrowser("http://" + addr); err != nil && !strings.Contains(err.Error(), "executable file not found") {

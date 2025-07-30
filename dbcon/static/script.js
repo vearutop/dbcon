@@ -109,7 +109,7 @@ function renderResult(result, idx) {
         }
     }
 
-    if (result.statement.includes("-- pie")) {
+    if (result.statement.includes("-- pie") && result.values.length > 1) {
         res += '<div id="pie-' + idx + '"></div>'
 
         // Sorting data by first column (count) descending.
@@ -119,12 +119,20 @@ function renderResult(result, idx) {
 
         pie_data = [];
 
+        var v = 0 // 0 col for value
+        var l = 1 // 1 col for label
+
+        if (isNaN(parseFloat(sortedValues[0][v]))) {
+            v = 1
+            l = 0
+        }
+
         // Transposing results from being an array of rows to array of columns.
         for (let i in sortedValues) {
             let item = sortedValues[i]
 
             pie_data.push(
-                {label: item[1], value: parseFloat(item[0]), color: getDarkColor()}
+                {label: item[l], value: parseFloat(item[v]), color: getDarkColor()}
             )
         }
     }

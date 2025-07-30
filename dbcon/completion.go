@@ -20,6 +20,15 @@ func addCompletionsFromStringList(list string, sep string, meta string, completi
 			continue
 		}
 
+		// Add function completion without arguments.
+		if strings.Contains(t, "(") {
+			completions = append(completions, SQLCompletion{
+				Value: strings.SplitN(t, "(", 2)[0] + "(",
+				Score: 1000,
+				Meta:  meta,
+			})
+		}
+
 		completions = append(completions, SQLCompletion{
 			Value: t,
 			Score: 1000,

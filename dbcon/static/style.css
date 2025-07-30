@@ -63,3 +63,7 @@
 #form-container-ask-ai.visible {
     visibility: visible;
 }
+
+.ace_editor.ace_autocomplete {
+    width: 1000px !important;
+}
