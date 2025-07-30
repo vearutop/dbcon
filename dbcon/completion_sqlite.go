@@ -420,7 +420,8 @@ func SqliteCompletions(db *sql.DB, options ...func(o *Options)) (_ []SQLCompleti
     json_tree(json,path)`, "\n", "json-func", completions)
 
 	promptBase = "Given the following SQLite database schema, answer my next question with SQL statement, " +
-		"only use columns defined in the schema:\n " + createTables + "\n\n"
+		"only use columns defined in the schema:\n " +
+		createTables + "\n\n"
 
 	return completions, promptBase
 }
