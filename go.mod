@@ -11,21 +11,21 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/swaggest/jsonform-go v0.2.6
 	github.com/swaggest/jsonschema-go v0.3.78
-	github.com/swaggest/openapi-go v0.2.58
-	github.com/swaggest/rest v0.2.74
+	github.com/swaggest/openapi-go v0.2.59
+	github.com/swaggest/rest v0.2.75
 	github.com/swaggest/swgui v1.8.4
 	github.com/swaggest/usecase v1.3.1
-	github.com/vearutop/flatjsonl v0.9.6
+	github.com/vearutop/flatjsonl v0.9.7
 	github.com/vearutop/statigz v1.5.0
-	github.com/yuin/goldmark v1.7.12
-	modernc.org/sqlite v1.38.0
+	github.com/yuin/goldmark v1.7.13
+	modernc.org/sqlite v1.38.2
 )
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Masterminds/squirrel v1.5.4 // indirect
 	github.com/bool64/ctxd v1.2.1 // indirect
-	github.com/bool64/progress v0.3.13 // indirect
+	github.com/bool64/progress v0.3.15 // indirect
 	github.com/bool64/shared v0.1.5 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -52,11 +52,11 @@ require (
 	github.com/yosuke-furukawa/json5 v0.1.2-0.20201207051438-cf7bb3f354ff // indirect
 	github.com/yudai/gojsondiff v1.0.0 // indirect
 	github.com/yudai/golcs v0.0.0-20170316035057-ecda9a501e82 // indirect
-	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
-	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792 // indirect
+	golang.org/x/sys v0.34.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	modernc.org/libc v1.66.2 // indirect
+	modernc.org/libc v1.66.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )

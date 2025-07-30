@@ -38,6 +38,7 @@ import (
 	_ "modernc.org/sqlite" // DB driver.
 )
 
+// DefaultListenAddress allows custom control.
 var DefaultListenAddress = "127.0.0.1:0"
 
 // Main is the main app function.
@@ -145,14 +146,24 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 			f.MemLimit = 1000
 			f.BufSize = 1e7
 
+			if _, err := exec.LookPath("sqlite3"); err == nil {
+				println("importing with sqlite3 CLI")
+
+				f.SQLiteCLI = true
+			}
+
 			proc, err := flatjsonl.NewProcessor(f, flatjsonl.Config{}, flatjsonl.Input{FileName: dsn})
 			if err != nil {
 				return fmt.Errorf("failed to import jsonl: %w", err)
 			}
 
+			st := time.Now()
+
 			if err := proc.Process(); err != nil {
 				return fmt.Errorf("failed to process jsonl: %w", err)
 			}
+
+			println("import completed in", time.Since(st).String())
 
 			continue
 		}
@@ -301,7 +312,7 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 	}()
 
 	addr := listener.Addr().String()
-	port := listener.Addr().(*net.TCPAddr).Port
+	port := listener.Addr().(*net.TCPAddr).Port //nolint:errcheck
 
 	if strings.HasPrefix(listen, ":") {
 		m, err := interfaces(false)
