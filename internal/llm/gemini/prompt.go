@@ -55,6 +55,7 @@ curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:g
 type Prompter struct {
 	AuthKey   string
 	Transport http.RoundTripper // default http.DefaultTransport.
+	ModelName string
 }
 
 // Response describes Gemini response.
@@ -91,9 +92,13 @@ type Response struct {
 	ModelVersion string `json:"modelVersion"`
 }
 
-// ModelName returns the name of LLM.
-func (ip *Prompter) ModelName() string {
-	return "gemini-2.0-flash"
+// Model returns the name of LLM.
+func (ip *Prompter) Model() string {
+	if ip.ModelName != "" {
+		return ip.ModelName
+	}
+
+	return "gemini-2.5-flash"
 }
 
 // Prompt asks LLM to translate a question to SQL statement.
@@ -130,7 +135,7 @@ func (ip *Prompter) Prompt(ctx context.Context, prompt string) (string, error) {
 
 	r, err := http.NewRequestWithContext(ctx,
 		http.MethodPost,
-		"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key="+ip.AuthKey,
+		"https://generativelanguage.googleapis.com/v1beta/models/"+ip.Model()+":generateContent?key="+ip.AuthKey,
 		bytes.NewReader(body))
 	if err != nil {
 		return "", err
