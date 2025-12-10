@@ -121,7 +121,7 @@ func DefaultDeps(instances []DBInstance) Deps {
 	if ollamaModel := os.Getenv("DBCON_OLLAMA_MODEL"); ollamaModel != "" {
 		deps.prompter = &ollama.Prompter{Model: ollamaModel}
 	} else if authKey := os.Getenv("DBCON_GEMINI_API_KEY"); authKey != "" {
-		deps.prompter = &gemini.Prompter{AuthKey: authKey}
+		deps.prompter = &gemini.Prompter{AuthKey: authKey, ModelName: os.Getenv("DBCON_GEMINI_MODEL")}
 	} else if authKey := os.Getenv("DBCON_OPENAI_KEY"); authKey != "" {
 		deps.prompter = &openai.Prompter{AuthKey: authKey}
 	}
