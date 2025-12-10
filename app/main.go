@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -27,6 +28,7 @@ import (
 	"github.com/bool64/sqluct"
 	_ "github.com/go-sql-driver/mysql" // DB driver.
 	_ "github.com/lib/pq"              // DB driver.
+	"github.com/swaggest/assertjson/json5"
 	"github.com/swaggest/openapi-go/openapi31"
 	"github.com/swaggest/rest/response/gzip"
 	"github.com/swaggest/rest/web"
@@ -35,11 +37,20 @@ import (
 	"github.com/vearutop/dbcon/dbcon"
 	"github.com/vearutop/dbcon/internal/graceful"
 	"github.com/vearutop/flatjsonl/flatjsonl"
+	"gopkg.in/yaml.v3"
 	_ "modernc.org/sqlite" // DB driver.
 )
 
-// DefaultListenAddress allows custom control.
-var DefaultListenAddress = "127.0.0.1:0"
+var (
+	// DefaultListenAddress allows custom control.
+	DefaultListenAddress = "127.0.0.1:0"
+
+	// PrepareFlatJSONLConfig is a custom control over flatjsonl.
+	PrepareFlatJSONLConfig func(cfg *flatjsonl.Config)
+
+	// PrepareFlatJSONLFlags is a custom control over flatjsonl.
+	PrepareFlatJSONLFlags func(flags *flatjsonl.Flags)
+)
 
 // Main is the main app function.
 func Main() error { //nolint:funlen,cyclop,maintidx
@@ -48,18 +59,28 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		skipBrowser bool
 		basicAuth   string
 		tables      string
+		flatconf    string
+		ver         bool
 	)
 
 	flag.StringVar(&listen, "listen", DefaultListenAddress, "listen address, port 0 picks a free random port")
 	flag.BoolVar(&skipBrowser, "s", false, "skip browser opening")
 	flag.StringVar(&basicAuth, "auth", "", "basic auth as user:password")
 	flag.StringVar(&tables, "tables", "", "comma-separated list table names to use for completion and AI")
+	flag.StringVar(&flatconf, "flatconf", "", "flatjsonl config file for JSONL import")
+	flag.BoolVar(&ver, "version", false, "show version")
 
 	flag.Parse()
+
+	if ver {
+		println(version.Module("github.com/vearutop/dbcon").Version)
+		return nil
+	}
 
 	if flag.NArg() == 0 {
 		println("Usage of dbcon:")
 		println("dbcon [OPTIONS] DB...")
+		println("\tSupported DB drivers:", strings.Join(sql.Drivers(), ", "))
 		println("\tDB can be a path to SQLite/CSV/JSONL file, or a URL with mysql:// or postgres:// scheme. Examples:")
 		println("\t\tpostgres://user:password@localhost/dbname?sslmode=disable")
 		println("\t\tmysql://user:password@localhost/dbname")
@@ -145,6 +166,20 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 			f.Concurrency = 2 * runtime.NumCPU()
 			f.MemLimit = 1000
 			f.BufSize = 1e7
+			if PrepareFlatJSONLFlags != nil {
+				PrepareFlatJSONLFlags(&f)
+			}
+
+			cfg := flatjsonl.Config{}
+			if flatconf != "" {
+				if err := loadConfig(flatconf, &cfg); err != nil {
+					return err
+				}
+			}
+
+			if PrepareFlatJSONLConfig != nil {
+				PrepareFlatJSONLConfig(&cfg)
+			}
 
 			if _, err := exec.LookPath("sqlite3"); err == nil {
 				println("importing with sqlite3 CLI")
@@ -152,7 +187,7 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 				f.SQLiteCLI = true
 			}
 
-			proc, err := flatjsonl.NewProcessor(f, flatjsonl.Config{}, flatjsonl.Input{FileName: dsn})
+			proc, err := flatjsonl.NewProcessor(f, cfg, flatjsonl.Input{FileName: dsn})
 			if err != nil {
 				return fmt.Errorf("failed to import jsonl: %w", err)
 			}
@@ -173,8 +208,16 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 			return fmt.Errorf("failed to parse dsn: %w", err)
 		}
 
+		switch {
+		case strings.HasSuffix(u.Path, ".duckdb"):
+			u.Scheme = "duckdb"
+		case strings.HasSuffix(u.Path, ".sqlite"), strings.HasSuffix(u.Path, ".db"):
+			u.Scheme = "sqlite"
+		}
+
 		switch u.Scheme {
 		case "":
+		case "sqlite":
 			db, err := sql.Open("sqlite", dsn)
 			if err != nil {
 				return fmt.Errorf("failed to open db: %w", err)
@@ -183,6 +226,22 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 			instances = append(instances, dbcon.DBInstance{
 				Name:     dsn,
 				Dialect:  sqluct.DialectSQLite3,
+				Instance: db,
+			})
+		case "duckdb":
+			p := u.Path
+			if p == "" {
+				p = u.Host
+			}
+
+			db, err := sql.Open("duckdb", p)
+			if err != nil {
+				return fmt.Errorf("failed to open db: %w", err)
+			}
+
+			instances = append(instances, dbcon.DBInstance{
+				Name:     filterDsn(dsn),
+				Dialect:  sqluct.DialectUnknown,
 				Instance: db,
 			})
 		case "postgres":
@@ -548,4 +607,29 @@ func basicAuthMW(realm string, userPass string) func(next http.Handler) http.Han
 func basicAuthFailed(w http.ResponseWriter, realm string) {
 	w.Header().Add("WWW-Authenticate", fmt.Sprintf(`Basic realm="%s"`, realm))
 	w.WriteHeader(http.StatusUnauthorized)
+}
+
+func loadConfig(value string, cfg *flatjsonl.Config) error {
+	if value == "" {
+		return nil
+	}
+
+	if err := json.Unmarshal([]byte(value), cfg); err == nil {
+		return nil
+	}
+
+	b, err := os.ReadFile(value)
+	if err != nil {
+		return fmt.Errorf("read config file: %w", err)
+	}
+
+	yerr := yaml.Unmarshal(b, cfg)
+	if yerr != nil {
+		err = json5.Unmarshal(b, cfg)
+		if err != nil {
+			return fmt.Errorf("decode config file: json5: %w, yaml: %s", err, yerr) //nolint
+		}
+	}
+
+	return nil
 }
