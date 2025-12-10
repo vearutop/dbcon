@@ -70,7 +70,7 @@ function renderResult(result, idx) {
     }
 
     if (result.error) {
-        res += '<p><a class="ai btn btn-info" onclick="return fixStatementAI('+idx+')">Fix 🤖</a> <code>' + result.error + '</code></p>';
+        res += '<p><a class="ai btn btn-info" onclick="return fixStatementAI(' + idx + ')">Fix 🤖</a> <code>' + result.error + '</code></p>';
 
         $('#query-results').append('<div>' + res + '</div>')
 
@@ -98,14 +98,64 @@ function renderResult(result, idx) {
 
         uplot_opts = uplotOpts()
 
+        function utcDate(ts) {
+            if (!ts) {
+                return null;
+            }
+
+            return uPlot.tzDate(new Date(ts * 1e3), 'Etc/UTC');
+        }
+
+        var updateDateFormatter = false;
+
         if (result.statement.includes('-- plot:time')) {
             uplot_opts.scales.x.time = true;
+
+            updateDateFormatter = true;
         }
 
         if (result.statement.includes('-- plot:rows')) {
             uplot_data = uplotRowsData(result, uplot_opts)
         } else {
             uplot_data = uplotColumnsData(result, uplot_opts)
+        }
+
+        if (updateDateFormatter && uplot_opts.series[0]) {
+            const fullDate = uPlot.fmtDate("{HH}:{mm}\n{YYYY}-{MM}-{DD}");
+            const dayDate = uPlot.fmtDate("{HH}:{mm}\n{MM}-{DD}");
+            const hourDate = uPlot.fmtDate("{HH}:{mm}");
+            const legendDate = uPlot.fmtDate("{YYYY}-{MM}-{DD} {HH}:{mm}:{ss}");
+
+            uplot_opts.axes[0].values = (u, vals, space) => {
+                return vals.map((v, i) => {
+                    const d = utcDate(v);
+                    const prev = i > 0 ? vals[i - 1] : null;
+                    if (!prev || !v) {
+                        return fullDate(d)
+                    }
+
+                    const prevUTCDate = utcDate(prev);
+
+                    if (d.getFullYear() !== prevUTCDate.getFullYear()) { // year changed
+                        return fullDate(d)
+                    } else if (d.getDate() !== prevUTCDate.getDate()) { // date changed
+                        return dayDate(d)
+                    } else { // same day
+                        return hourDate(d)
+                    }
+                });
+            };
+
+            uplot_opts.series[0] = {
+                // legend value formatter
+                value: function(u, ts) {
+                    if (!ts) {
+                        return null;
+                    }
+
+                    return legendDate(utcDate(ts));
+                },
+            };
         }
     }
 
