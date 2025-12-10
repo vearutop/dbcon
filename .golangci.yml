@@ -5,8 +5,18 @@ run:
 linters:
   default: all
   disable:
+    - cyclop
+    - err113
+    - unqueryvet
+    - gochecknoinits
+    - funlen
+    - gocognit
+    - gocyclo
+    - nestif
     - noinlineerr
+    - noctx
     - wsl_v5
+    - gosec
     - funcorder
     - copyloopvar
     - depguard

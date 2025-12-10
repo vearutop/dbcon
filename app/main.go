@@ -74,6 +74,7 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 
 	if ver {
 		println(version.Module("github.com/vearutop/dbcon").Version)
+
 		return nil
 	}
 
@@ -166,6 +167,7 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 			f.Concurrency = 2 * runtime.NumCPU()
 			f.MemLimit = 1000
 			f.BufSize = 1e7
+
 			if PrepareFlatJSONLFlags != nil {
 				PrepareFlatJSONLFlags(&f)
 			}
