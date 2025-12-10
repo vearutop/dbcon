@@ -7,7 +7,6 @@ linters:
   disable:
     - cyclop
     - err113
-    - unqueryvet
     - gochecknoinits
     - funlen
     - gocognit
