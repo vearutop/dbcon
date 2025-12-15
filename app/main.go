@@ -315,6 +315,12 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		}
 	})
 	dbcon.Mount(s, "/", dbcon.DefaultDeps(instances), func(options *dbcon.Options) {
+		options.Completions = append(options.Completions, dbcon.SQLCompletion{
+			Value: "-- transpose",
+			Score: 1000,
+			Meta:  "transpose result",
+		})
+
 		options.AddValueProcessor("img", func(v any) any {
 			if b, ok := v.([]byte); ok {
 				ct := http.DetectContentType(b)
