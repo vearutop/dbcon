@@ -188,36 +188,13 @@ function renderResult(result, idx) {
     }
 
     if (!uplot_opts && !pie_data) {
-        res += '<table class="pure-table result"><thead><tr>';
-        for (k in result.columns) {
-            res += '<th>' + result.columns[k] + '</th>'
+        var transpose = result.statement.includes("-- transpose")
+
+        if (transpose) {
+            res += renderTransposedTable(result)
+        } else {
+            res += renderTable(result)
         }
-        res += "</tr></thead>\n"
-
-        res += "<tbody>"
-        var odd = true
-        for (var i in result.values) {
-            var item = result.values[i]
-            if (odd) {
-                res += '<tr class="pure-table-odd">'
-                odd = false
-            } else {
-                res += '<tr>'
-                odd = true
-            }
-
-            for (var k in item) {
-                var v = item[k]
-
-                if (v && typeof v === 'string' && (v.indexOf("\n") !== -1 || v.indexOf("\t") !== -1)) {
-                    v = '<pre>' + v + '</pre>'
-                }
-
-                res += '<td>' + v + '</td>'
-            }
-            res += '</tr>'
-        }
-        res += "</tbody></table><hr/>"
     }
 
     $('#query-results').append('<div>' + res + '</div>')
@@ -239,6 +216,90 @@ function renderResult(result, idx) {
         drawPieChart(pie_data, total, document.getElementById("pie-" + idx))
     }
 }
+
+/**
+ * @param {Result} result
+ * @returns {string}
+ */
+function renderTable(result) {
+    var res = ''
+
+    res += '<table class="pure-table result"><thead><tr>';
+    for (k in result.columns) {
+        res += '<th>' + result.columns[k] + '</th>'
+    }
+    res += "</tr></thead>\n"
+
+    res += "<tbody>"
+    var odd = true
+    for (const i in result.values) {
+        const item = result.values[i]
+        if (odd) {
+            res += '<tr class="pure-table-odd">'
+            odd = false
+        } else {
+            res += '<tr>'
+            odd = true
+        }
+
+        for (const k in item) {
+            res += '<td>' + renderValue(item[k]) + '</td>'
+        }
+        res += '</tr>'
+    }
+    res += "</tbody></table><hr/>"
+
+    return res
+}
+
+/**
+ * @param {Result} result
+ * @returns {string}
+ */
+function renderTransposedTable(result) {
+    let res = ''
+
+    res += '<table class="pure-table result"><thead><tr>';
+    res += '<th>column</th>'
+
+    for (const i in result.values) {
+        res += '<th>row '+i+'</th>'
+    }
+
+    res += "</tr></thead>\n"
+
+    res += "<tbody>"
+    let odd = true
+    for (const k in result.columns) {
+        if (odd) {
+            res += '<tr class="pure-table-odd">'
+            odd = false
+        } else {
+            res += '<tr>'
+            odd = true
+        }
+
+        res += '<td>' + result.columns[k] + '</td>'
+
+        for (const i in result.values) {
+            res += '<td>' + renderValue(result.values[i][k]) + '</td>'
+        }
+
+        res += '</tr>'
+    }
+    res += "</tbody></table><hr/>"
+
+    return res
+}
+
+function renderValue(v) {
+    if (v && typeof v === 'string' && (v.indexOf("\n") !== -1 || v.indexOf("\t") !== -1)) {
+        return '<pre>' + v + '</pre>';
+    }
+
+    return v;
+}
+
 
 function uplotOpts() {
     return {
