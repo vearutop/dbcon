@@ -188,10 +188,10 @@ function renderResult(result, idx) {
     }
 
     if (!uplot_opts && !pie_data) {
-        var transpose = result.statement.includes("-- transpose")
+        let transpose = result.statement.includes("-- transpose")
 
         if (transpose) {
-            res += renderTransposedTable(result)
+            res += renderTransposedTable(result, result.statement.includes("-- transpose:skip_similar"))
         } else {
             res += renderTable(result)
         }
@@ -254,9 +254,10 @@ function renderTable(result) {
 
 /**
  * @param {Result} result
+ * @param {Boolean} skipSimilar
  * @returns {string}
  */
-function renderTransposedTable(result) {
+function renderTransposedTable(result, skipSimilar) {
     let res = ''
 
     res += '<table class="pure-table result"><thead><tr>';
@@ -271,6 +272,29 @@ function renderTransposedTable(result) {
     res += "<tbody>"
     let odd = true
     for (const k in result.columns) {
+        if (skipSimilar) {
+            let skip = true
+
+            let prev = result.values[0][k]
+            for (const i  in result.values) {
+                if (i === 0) continue;
+
+                let val = result.values[i][k]
+
+                if (val !== prev) {
+                    skip = false
+
+                    break
+                }
+
+                prev = val
+            }
+
+            if (skip) {
+                continue
+            }
+        }
+
         if (odd) {
             res += '<tr class="pure-table-odd">'
             odd = false

@@ -67,3 +67,7 @@
 .ace_editor.ace_autocomplete {
     width: 1000px !important;
 }
+
+#schema-form-queries ul {
+    padding-left: 10px;
+}

@@ -186,6 +186,8 @@ func DBConsole(deps Deps, prefix string, options ...func(*Options)) usecase.Inte
 		{Value: "-- strip", Score: 1000, Meta: "render data only"},
 		{Value: "-- # ", Score: 1000, Meta: "add header"},
 		{Value: "-- > ", Score: 1000, Meta: "add description"},
+		{Value: "-- transpose", Score: 1000, Meta: "transpose result"},
+		{Value: "-- transpose:skip_similar", Score: 1000, Meta: "transpose result for diff"},
 	}
 
 	cmp = append(cmp, o.Completions...)
