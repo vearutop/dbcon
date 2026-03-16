@@ -44,3 +44,5 @@ export RELEASE_TARGETS="darwin/amd64 darwin/arm64 linux/amd64 linux/dbg-amd64 li
 
 ## Run tests
 test: test-unit
+
+-include local.mk

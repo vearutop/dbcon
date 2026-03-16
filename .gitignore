@@ -4,3 +4,4 @@
 /bench-*.txt
 /vendor
 /local.go
+/local.mk
