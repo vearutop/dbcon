@@ -91,27 +91,37 @@ function renderResult(result, idx) {
 
     let uplot_opts = null;
     let uplot_data = null;
+    let bars_opts = null;
+    let bars_data = null;
     let pie_data = null;
+
+    if (result.statement.includes("-- bars:rows") || result.statement.includes("-- bars:time")) {
+        res += '<div id="bars-' + idx + '"></div>'
+
+        bars_opts = uplotOpts()
+
+        if (result.statement.includes("-- bars:time")) {
+            bars_opts.scales.x.time = true;
+        }
+
+        if (result.statement.includes("-- bars:rows")) {
+            bars_data = uplotBarsRowsData(result, bars_opts)
+        } else {
+            bars_data = uplotBarsColumnsData(result, bars_opts)
+        }
+
+        if (result.statement.includes("-- bars:time")) {
+            applyTimeAxis(bars_opts)
+        }
+    }
 
     if (result.statement.includes("-- plot")) {
         res += '<div id="plot-' + idx + '"></div>'
 
         uplot_opts = uplotOpts()
 
-        function utcDate(ts) {
-            if (!ts) {
-                return null;
-            }
-
-            return uPlot.tzDate(new Date(ts * 1e3), 'Etc/UTC');
-        }
-
-        var updateDateFormatter = false;
-
         if (result.statement.includes('-- plot:time')) {
             uplot_opts.scales.x.time = true;
-
-            updateDateFormatter = true;
         }
 
         if (result.statement.includes('-- plot:rows')) {
@@ -120,42 +130,8 @@ function renderResult(result, idx) {
             uplot_data = uplotColumnsData(result, uplot_opts)
         }
 
-        if (updateDateFormatter && uplot_opts.series[0]) {
-            const fullDate = uPlot.fmtDate("{HH}:{mm}\n{YYYY}-{MM}-{DD}");
-            const dayDate = uPlot.fmtDate("{HH}:{mm}\n{MM}-{DD}");
-            const hourDate = uPlot.fmtDate("{HH}:{mm}");
-            const legendDate = uPlot.fmtDate("{YYYY}-{MM}-{DD} {HH}:{mm}:{ss}");
-
-            uplot_opts.axes[0].values = (u, vals, space) => {
-                return vals.map((v, i) => {
-                    const d = utcDate(v);
-                    const prev = i > 0 ? vals[i - 1] : null;
-                    if (!prev || !v) {
-                        return fullDate(d)
-                    }
-
-                    const prevUTCDate = utcDate(prev);
-
-                    if (d.getFullYear() !== prevUTCDate.getFullYear()) { // year changed
-                        return fullDate(d)
-                    } else if (d.getDate() !== prevUTCDate.getDate()) { // date changed
-                        return dayDate(d)
-                    } else { // same day
-                        return hourDate(d)
-                    }
-                });
-            };
-
-            uplot_opts.series[0] = {
-                // legend value formatter
-                value: function(u, ts) {
-                    if (!ts) {
-                        return null;
-                    }
-
-                    return legendDate(utcDate(ts));
-                },
-            };
+        if (result.statement.includes('-- plot:time')) {
+            applyTimeAxis(uplot_opts)
         }
     }
 
@@ -187,7 +163,7 @@ function renderResult(result, idx) {
         }
     }
 
-    if (!uplot_opts && !pie_data) {
+    if (!uplot_opts && !bars_opts && !pie_data) {
         let transpose = result.statement.includes("-- transpose")
 
         if (transpose) {
@@ -204,6 +180,10 @@ function renderResult(result, idx) {
         // console.log(uplot_opts)
         // console.log(uplot_data)
         new uPlot(uplot_opts, uplot_data, document.getElementById("plot-" + idx));
+    }
+
+    if (bars_opts && bars_data) {
+        new uPlot(bars_opts, bars_data, document.getElementById("bars-" + idx));
     }
 
     if (pie_data) {
@@ -368,6 +348,172 @@ function uplotOpts() {
     };
 }
 
+function toNumberOrNull(v) {
+    if (v === null || typeof v === 'undefined') {
+        return null;
+    }
+    if (typeof v === 'string' && v.trim() === '') {
+        return null;
+    }
+    let n = parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+}
+
+function applyTimeAxis(uplot_opts) {
+    function utcDate(ts) {
+        if (!ts) {
+            return null;
+        }
+
+        return uPlot.tzDate(new Date(ts * 1e3), 'Etc/UTC');
+    }
+
+    const fullDate = uPlot.fmtDate("{HH}:{mm}\n{YYYY}-{MM}-{DD}");
+    const dayDate = uPlot.fmtDate("{HH}:{mm}\n{MM}-{DD}");
+    const hourDate = uPlot.fmtDate("{HH}:{mm}");
+    const legendDate = uPlot.fmtDate("{YYYY}-{MM}-{DD} {HH}:{mm}:{ss}");
+
+    uplot_opts.axes[0].values = (u, vals, space) => {
+        return vals.map((v, i) => {
+            const d = utcDate(v);
+            const prev = i > 0 ? vals[i - 1] : null;
+            if (!prev || !v) {
+                return fullDate(d)
+            }
+
+            const prevUTCDate = utcDate(prev);
+
+            if (d.getFullYear() !== prevUTCDate.getFullYear()) { // year changed
+                return fullDate(d)
+            } else if (d.getDate() !== prevUTCDate.getDate()) { // date changed
+                return dayDate(d)
+            } else { // same day
+                return hourDate(d)
+            }
+        });
+    };
+
+    if (uplot_opts.series[0]) {
+        uplot_opts.series[0].value = function(u, ts) {
+            if (!ts) {
+                return null;
+            }
+
+            return legendDate(utcDate(ts));
+        };
+    }
+}
+
+function stack(data, omit) {
+    let data2 = [];
+    let bands = [];
+    let d0Len = data[0].length;
+    let accum = Array(d0Len);
+
+    for (let i = 0; i < d0Len; i++) {
+        accum[i] = 0;
+    }
+
+    for (let i = 1; i < data.length; i++) {
+        data2.push(omit(i) ? data[i] : data[i].map((v, i) => {
+            if (v === null || typeof v === 'undefined') {
+                return null;
+            }
+            let n = +v;
+            if (!Number.isFinite(n)) {
+                return null;
+            }
+            return (accum[i] += n);
+        }));
+    }
+
+    for (let i = 1; i < data.length; i++) {
+        !omit(i) && bands.push({
+            series: [
+                data.findIndex((s, j) => j > i && !omit(j)),
+                i,
+            ],
+        });
+    }
+
+    bands = bands.filter(b => b.series[0] > -1 && b.series[1] > -1);
+
+    return {
+        data: [data[0]].concat(data2),
+        bands,
+    };
+}
+
+function getStackedOpts(uplot_opts, series, data) {
+    uplot_opts.series = series;
+
+    let stacked = stack(data, i => false);
+    uplot_opts.bands = stacked.bands;
+
+    uplot_opts.cursor = uplot_opts.cursor || {};
+    uplot_opts.cursor.dataIdx = (u, seriesIdx, closestIdx, xValue) => {
+        return data[seriesIdx][closestIdx] == null ? null : closestIdx;
+    };
+
+    uplot_opts.series.forEach((s, si) => {
+        s.value = (u, v, si, i) => data[si][i];
+
+        s.points = s.points || {};
+
+        // scan raw unstacked data to return only real points
+        s.points.filter = (u, seriesIdx, show, gaps) => {
+            if (show) {
+                let pts = [];
+                data[seriesIdx].forEach((v, i) => {
+                    v != null && pts.push(i);
+                });
+                return pts;
+            }
+        }
+    });
+
+    // force 0 to be the sum minimum instead of the bottom series
+    uplot_opts.scales.y = {
+        range: (u, min, max) => {
+            let minMax = uPlot.rangeNum(0, max, 0.1, true);
+            return [0, minMax[1]];
+        }
+    };
+
+    // restack on toggle
+    uplot_opts.hooks = uplot_opts.hooks || {};
+    uplot_opts.hooks.setSeries = uplot_opts.hooks.setSeries || [];
+    uplot_opts.hooks.setSeries.push((u, i) => {
+        let stacked = stack(data, i => !u.series[i].show);
+        u.delBand(null);
+        stacked.bands.forEach(b => u.addBand(b));
+        u.setData(stacked.data);
+    });
+
+    return {opts: uplot_opts, data: stacked.data};
+}
+
+function buildStackedBarsSeries(columns) {
+    const { bars } = uPlot.paths;
+    const barsPath = bars({size: [0.95, 100]});
+
+    let series = [{
+        label: columns[0],
+    }];
+
+    for (let i = 1; i < columns.length; i++) {
+        series.push({
+            label: columns[i],
+            width: 1,
+            fill: getDarkColor(),
+            paths: barsPath,
+            points: {show: false},
+        });
+    }
+
+    return series;
+}
+
 /**
  *
  * @param {Result} result
@@ -440,6 +586,104 @@ function uplotRowsData(result, uplot_opts) {
     }
 
     return uplot_data
+}
+
+/**
+ *
+ * @param {Result} result
+ * @param uplot_opts
+ * @returns {[]}
+ */
+function uplotBarsRowsData(result, uplot_opts) {
+    let timedData = {}
+    let labels = {}
+
+    for (let i in result.values) {
+        let row = result.values[i]
+        let t = toNumberOrNull(row[0])
+        let val = toNumberOrNull(row[1])
+        let label = row[2]
+
+        if (t === null || typeof label === 'undefined') {
+            continue;
+        }
+
+        labels[label] = 1
+        if (!timedData[t]) {
+            timedData[t] = {};
+        }
+        timedData[t][label] = val
+    }
+
+    let labelsArr = Object.keys(labels).sort()
+    let series = buildStackedBarsSeries([result.columns[0]].concat(labelsArr))
+
+    let uplot_data = []
+    for (let i = 0; i < 1 + labelsArr.length; i++) {
+        uplot_data.push([])
+    }
+
+    let xVals = Object.keys(timedData).map(k => parseFloat(k)).filter(Number.isFinite)
+    xVals.sort((a, b) => a - b)
+
+    for (let xi = 0; xi < xVals.length; xi++) {
+        let t = xVals[xi]
+        uplot_data[0].push(t)
+
+        let values = timedData[t] || {}
+        for (let li = 0; li < labelsArr.length; li++) {
+            let label = labelsArr[li]
+            let val = values[label]
+            uplot_data[1 + li].push(typeof val === 'undefined' ? null : val)
+        }
+    }
+
+    let stacked = getStackedOpts(uplot_opts, series, uplot_data);
+
+    return stacked.data;
+}
+
+/**
+ *
+ * @param {Result} result
+ * @param uplot_opts
+ * @returns {[]}
+ */
+function uplotBarsColumnsData(result, uplot_opts) {
+    let series = buildStackedBarsSeries(result.columns);
+    let uplot_data = [];
+    for (let i = 0; i < result.columns.length; i++) {
+        uplot_data.push([]) // Separate vector for each column (X + multiple Y).
+    }
+
+    let sortable = [];
+    for (let i in result.values) {
+        let item = result.values[i];
+        let x = toNumberOrNull(item[0]);
+        if (x === null) {
+            continue;
+        }
+        sortable.push({x, item});
+    }
+
+    // Sorting data by first column (X axis) ascending.
+    sortable.sort(function (a, b) {
+        return a.x - b.x
+    });
+
+    for (let i = 0; i < sortable.length; i++) {
+        let item = sortable[i].item;
+        uplot_data[0].push(sortable[i].x);
+
+        for (let j = 1; j < result.columns.length; j++) {
+            let val = (j < item.length) ? toNumberOrNull(item[j]) : null;
+            uplot_data[j].push(val);
+        }
+    }
+
+    let stacked = getStackedOpts(uplot_opts, series, uplot_data);
+
+    return stacked.data;
 }
 
 /**
