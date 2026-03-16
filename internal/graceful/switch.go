@@ -122,7 +122,7 @@ func (s *Switch) waitForSignal(done chan error, timeout time.Duration) {
 		select {
 		case sem <- struct{}{}:
 		case <-deadline:
-			var err ErrTimeout
+			err := make(ErrTimeout, 0, len(active))
 
 			s.mu.Lock()
 
