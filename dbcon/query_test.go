@@ -8,6 +8,7 @@ import (
 )
 
 func TestSplitStatements(t *testing.T) {
+	//nolint:unqueryvet
 	s := `SELECT "ol'o""lo","",'';
 	-- next sta;tement
 	SELECT * FROM refers order by ts desc limit 15;

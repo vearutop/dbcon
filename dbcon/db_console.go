@@ -177,7 +177,7 @@ func DBConsole(deps Deps, prefix string, options ...func(*Options)) usecase.Inte
 	}
 
 	completions := map[string][]SQLCompletion{}
-	cmp := []SQLCompletion{
+	cmp := []SQLCompletion{ //nolint:prealloc
 		{Value: "-- plot:cols", Score: 1000, Meta: "exp cols: x, y1, y2, ..."},
 		{Value: "-- plot:rows", Score: 1000, Meta: "exp cols: x, y, label"},
 		{Value: "-- plot:time", Score: 1000, Meta: "time series"},
