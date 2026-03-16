@@ -750,6 +750,7 @@ function renderResults() {
     $('#query-results table.result').fancyTable({
         sortable: true,
         searchable: true,
+        fuzzySearch: true,
         pagination: false,
         globalSearch: true
     });
@@ -851,6 +852,8 @@ function fancyTable(options) {
         perPage: 10,
         sortable: true,
         searchable: true,
+        fuzzySearch: false,
+        fuzzySearchOptions: null,
         matchCase: false,
         exactMatch: false,
         localeCompare: false,
@@ -885,25 +888,64 @@ function fancyTable(options) {
         },
         testing: false
     }, options);
+    if (settings.fuzzySearch && typeof uFuzzy === "undefined") {
+        settings.fuzzySearch = false;
+    }
     var instance = this;
     this.settings = settings;
+    function buildFuzzyIndex(elm) {
+        if (!settings.fuzzySearch || !settings.globalSearch) {
+            return;
+        }
+        let rows = $(elm).find("tbody tr").toArray();
+        let haystack = rows.map(row => {
+            let parts = [];
+            $(row).find("td").each(function (idx) {
+                if (Array.isArray(settings.globalSearchExcludeColumns) && settings.globalSearchExcludeColumns.includes(idx + 1)) {
+                    return;
+                }
+                parts.push($(this).text());
+            });
+            return parts.join(" ");
+        });
+        elm.fancyTable.fuzzyRows = rows;
+        elm.fancyTable.fuzzyHaystack = haystack;
+    }
     this.tableUpdate = function (elm) {
         settings.beforeUpdate.call(this, elm);
         elm.fancyTable.matches = 0;
-        $(elm).find("tbody tr").each(function () {
+        let fuzzyMatches = null;
+        if (settings.fuzzySearch && settings.globalSearch && elm.fancyTable.search) {
+            if (!elm.fancyTable.fuzzy) {
+                elm.fancyTable.fuzzy = new uFuzzy(settings.fuzzySearchOptions || {});
+            }
+            if (!elm.fancyTable.fuzzyHaystack || elm.fancyTable.fuzzyHaystack.length !== $(elm).find("tbody tr").length) {
+                buildFuzzyIndex(elm);
+            }
+            let res = elm.fancyTable.fuzzy.search(elm.fancyTable.fuzzyHaystack || [], elm.fancyTable.search);
+            let idxs = (res && res[0]) ? res[0] : [];
+            let order = res ? res[2] : null;
+            let matched = order && order.length ? order.map(i => idxs[i]) : idxs;
+            fuzzyMatches = new Set(matched);
+        }
+        $(elm).find("tbody tr").each(function (rowIdx) {
             var n = 0;
             var match = true;
             var globalMatch = false;
-            $(this).find("td").each(function () {
-                if (!settings.globalSearch && elm.fancyTable.searchArr[n] && !(instance.isSearchMatch($(this).html(), elm.fancyTable.searchArr[n]))) {
-                    match = false;
-                } else if (settings.globalSearch && (!elm.fancyTable.search || (instance.isSearchMatch($(this).html(), elm.fancyTable.search)))) {
-                    if (!Array.isArray(settings.globalSearchExcludeColumns) || !settings.globalSearchExcludeColumns.includes(n + 1)) {
-                        globalMatch = true;
+            if (settings.globalSearch && fuzzyMatches) {
+                globalMatch = fuzzyMatches.has(rowIdx);
+            } else {
+                $(this).find("td").each(function () {
+                    if (!settings.globalSearch && elm.fancyTable.searchArr[n] && !(instance.isSearchMatch($(this).html(), elm.fancyTable.searchArr[n]))) {
+                        match = false;
+                    } else if (settings.globalSearch && (!elm.fancyTable.search || (instance.isSearchMatch($(this).html(), elm.fancyTable.search)))) {
+                        if (!Array.isArray(settings.globalSearchExcludeColumns) || !settings.globalSearchExcludeColumns.includes(n + 1)) {
+                            globalMatch = true;
+                        }
                     }
-                }
-                n++;
-            });
+                    n++;
+                });
+            }
             if ((settings.globalSearch && globalMatch) || (!settings.globalSearch && match)) {
                 elm.fancyTable.matches++
                 if (!settings.pagination || (elm.fancyTable.matches > (elm.fancyTable.perPage * (elm.fancyTable.page - 1)) && elm.fancyTable.matches <= (elm.fancyTable.perPage * elm.fancyTable.page))) {
@@ -1019,6 +1061,7 @@ function fancyTable(options) {
                 elm.fancyTable.rowSortOrder[$(this).data("rowid")] = index;
             });
             $(elm).find("tbody").empty().append(rows);
+            buildFuzzyIndex(elm);
         }
     };
     this.each(function () {
@@ -1039,7 +1082,10 @@ function fancyTable(options) {
             sortColumn: settings.sortColumn,
             sortOrder: (typeof settings.sortOrder === "undefined") ? 1 : (new RegExp("desc", "i").test(settings.sortOrder) || settings.sortOrder == -1) ? -1 : 1,
             sortAs: [], // undefined, numeric, datetime, case-insensitive, or custom
-            paginationElement: settings.paginationElement
+            paginationElement: settings.paginationElement,
+            fuzzy: settings.fuzzySearch ? new uFuzzy(settings.fuzzySearchOptions || {}) : null,
+            fuzzyRows: null,
+            fuzzyHaystack: null
         };
         elm.fancyTable.rowSortOrder = new Array(elm.fancyTable.nRows);
         if ($(elm).find("tbody").length == 0) {
@@ -1130,6 +1176,7 @@ function fancyTable(options) {
         }
         // Sort
         instance.tableSort(elm);
+        buildFuzzyIndex(elm);
         if (settings.pagination && !settings.paginationElement) {
             $(elm).find("tfoot").remove();
             $(elm).append($("<tfoot><tr></tr></tfoot>"));

@@ -55,6 +55,7 @@ function downloadHTMLReport() {
     var js = ""
     js += get("/json-form/jquery-3.7.1.min.js") + "\n"
     js += get("/uPlot.iife.min.js") + "\n"
+    js += get("/uFuzzy.iife.js") + "\n"
     js += get("/script.js") + "\n"
 
     results = rtemp
@@ -184,7 +185,8 @@ function renderColumnsDirectory() {
         sortable: true,
         searchable: true,
         pagination: false,
-        globalSearch: true
+        globalSearch: true,
+        fuzzySearch: true,
     });
 }
 

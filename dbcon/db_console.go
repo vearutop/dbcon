@@ -218,6 +218,7 @@ func DBConsole(deps Deps, prefix string, options ...func(*Options)) usecase.Inte
 
 <link rel="icon" href="` + prefix + `favicon.png" type="image/png"/>
 <script src="` + prefix + `uPlot.iife.min.js"></script>
+<script src="` + prefix + `uFuzzy.iife.js"></script>
 <script src="` + prefix + `script.js"></script>
 <script src="` + prefix + `script_extra.js"></script>
 <link rel="stylesheet" href="` + prefix + `style.css">
