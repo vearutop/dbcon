@@ -404,7 +404,7 @@ function applyTimeAxis(uplot_opts) {
     }
 }
 
-function stack(data, omit) {
+function stack(data, omit, fillNulls) {
     let data2 = [];
     let bands = [];
     let d0Len = data[0].length;
@@ -417,11 +417,11 @@ function stack(data, omit) {
     for (let i = 1; i < data.length; i++) {
         data2.push(omit(i) ? data[i] : data[i].map((v, i) => {
             if (v === null || typeof v === 'undefined') {
-                return null;
+                return fillNulls ? accum[i] : null;
             }
             let n = +v;
             if (!Number.isFinite(n)) {
-                return null;
+                return fillNulls ? accum[i] : null;
             }
             return (accum[i] += n);
         }));
@@ -447,7 +447,7 @@ function stack(data, omit) {
 function getStackedOpts(uplot_opts, series, data) {
     uplot_opts.series = series;
 
-    let stacked = stack(data, i => false);
+    let stacked = stack(data, i => false, true);
     uplot_opts.bands = stacked.bands;
 
     uplot_opts.cursor = uplot_opts.cursor || {};
@@ -484,7 +484,7 @@ function getStackedOpts(uplot_opts, series, data) {
     uplot_opts.hooks = uplot_opts.hooks || {};
     uplot_opts.hooks.setSeries = uplot_opts.hooks.setSeries || [];
     uplot_opts.hooks.setSeries.push((u, i) => {
-        let stacked = stack(data, i => !u.series[i].show);
+        let stacked = stack(data, i => !u.series[i].show, true);
         u.delBand(null);
         stacked.bands.forEach(b => u.addBand(b));
         u.setData(stacked.data);
@@ -515,64 +515,69 @@ function buildStackedBarsSeries(columns) {
 }
 
 /**
+ * Build rows-based data (x, y, label) into uPlot columnar data.
+ * @param {Result} result
+ * @returns {{uplot_data: Array<Array<*>>, labelsArr: Array<string>}}
+ */
+function buildRowsData(result) {
+    let timedData = {}
+    let labels = {}
+
+    for (let i in result.values) {
+        let row = result.values[i]
+        let t = toNumberOrNull(row[0])
+        let val = toNumberOrNull(row[1])
+        let label = row[2]
+
+        if (t === null || typeof label === 'undefined') {
+            continue;
+        }
+
+        labels[label] = 1
+        let key = String(t)
+        if (!timedData[key]) {
+            timedData[key] = {};
+        }
+        timedData[key][label] = val
+    }
+
+    let labelsArr = Object.keys(labels).sort()
+
+    let uplot_data = []
+    for (let i = 0; i < 1 + labelsArr.length; i++) {
+        uplot_data.push([])
+    }
+
+    let xVals = Object.keys(timedData)
+        .map(k => parseFloat(k))
+        .filter(Number.isFinite)
+    xVals.sort((a, b) => a - b)
+
+    for (let xi = 0; xi < xVals.length; xi++) {
+        let t = xVals[xi]
+        uplot_data[0].push(t)
+
+        let values = timedData[String(t)] || {}
+        for (let li = 0; li < labelsArr.length; li++) {
+            let label = labelsArr[li]
+            let val = values[label]
+            uplot_data[1 + li].push(typeof val === 'undefined' ? null : val)
+        }
+    }
+
+    return {uplot_data, labelsArr}
+}
+
+/**
  *
  * @param {Result} result
  * @param uplot_opts
  * @returns {[]}
  */
 function uplotRowsData(result, uplot_opts) {
-    let uplot_data = [];
-
-    let timedData = {}
-    let labels = {}
-
-    for (let i in result.values) {
-        let value = result.values[i]
-        labels[value[2]] = 1
-
-        let t = value[0]
-        let val = value[1]
-        let label = value[2]
-        if (!timedData[t]) {
-            timedData[t] = {};
-        }
-
-        timedData[t][label] = val
-    }
-
-    // Series for X.
-    uplot_data.push([])
-
-    // Series for Y.
-    let labelsArr = []
-    for (let label in labels) {
-        uplot_data.push([])
-        labelsArr.push(label)
-    }
-    labelsArr = labelsArr.sort()
-
-    for (let t in timedData) {
-        uplot_data[0].push(parseFloat(t))
-    }
-
-    uplot_data[0].sort()
-
-    for (let tt = 0; tt < uplot_data[0].length; tt++) {
-        var values = timedData[uplot_data[0][tt]]
-
-        for (let i = 0; i < labelsArr.length; i++) {
-            let l = labelsArr[i]
-            let val = values[l]
-
-            if (typeof val === 'undefined') {
-                val = null
-            } else {
-                val = parseFloat(val)
-            }
-
-            uplot_data[1 + i].push(val)
-        }
-    }
+    let built = buildRowsData(result)
+    let uplot_data = built.uplot_data
+    let labelsArr = built.labelsArr
 
     uplot_opts.series.push({
         label: result.columns[0],
@@ -595,48 +600,10 @@ function uplotRowsData(result, uplot_opts) {
  * @returns {[]}
  */
 function uplotBarsRowsData(result, uplot_opts) {
-    let timedData = {}
-    let labels = {}
-
-    for (let i in result.values) {
-        let row = result.values[i]
-        let t = toNumberOrNull(row[0])
-        let val = toNumberOrNull(row[1])
-        let label = row[2]
-
-        if (t === null || typeof label === 'undefined') {
-            continue;
-        }
-
-        labels[label] = 1
-        if (!timedData[t]) {
-            timedData[t] = {};
-        }
-        timedData[t][label] = val
-    }
-
-    let labelsArr = Object.keys(labels).sort()
+    let built = buildRowsData(result)
+    let uplot_data = built.uplot_data
+    let labelsArr = built.labelsArr
     let series = buildStackedBarsSeries([result.columns[0]].concat(labelsArr))
-
-    let uplot_data = []
-    for (let i = 0; i < 1 + labelsArr.length; i++) {
-        uplot_data.push([])
-    }
-
-    let xVals = Object.keys(timedData).map(k => parseFloat(k)).filter(Number.isFinite)
-    xVals.sort((a, b) => a - b)
-
-    for (let xi = 0; xi < xVals.length; xi++) {
-        let t = xVals[xi]
-        uplot_data[0].push(t)
-
-        let values = timedData[t] || {}
-        for (let li = 0; li < labelsArr.length; li++) {
-            let label = labelsArr[li]
-            let val = values[label]
-            uplot_data[1 + li].push(typeof val === 'undefined' ? null : val)
-        }
-    }
 
     let stacked = getStackedOpts(uplot_opts, series, uplot_data);
 
