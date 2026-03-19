@@ -98,6 +98,16 @@ function renderResult(result, idx) {
 
         uplot_opts = uplotOpts()
 
+        let captionMatch = result.statement.match(/plot:caption=(.+)/)
+        if (captionMatch && captionMatch[1]) {
+            uplot_opts.title = captionMatch[1].trim()
+        }
+
+        let heightMatch = result.statement.match(/plot:height=(\d+)(?:px)?/)
+        if (heightMatch && heightMatch[1]) {
+            uplot_opts.height = parseInt(heightMatch[1], 10)
+        }
+
         if (result.statement.includes('-- plot:time')) {
             uplot_opts.scales.x.time = true;
         }
@@ -115,7 +125,9 @@ function renderResult(result, idx) {
         }
 
         if (result.statement.includes('-- plot:time')) {
-            applyTimeAxis(uplot_opts)
+            let m = result.statement.match(/plot:time_axis_fmt=([^\s]+)/)
+            let axisFmt = m && m[1] ? m[1] : null
+            applyTimeAxis(uplot_opts, axisFmt)
         }
     }
 
@@ -339,7 +351,7 @@ function toNumberOrNull(v) {
     return Number.isFinite(n) ? n : null;
 }
 
-function applyTimeAxis(uplot_opts) {
+function applyTimeAxis(uplot_opts, axisFmt) {
     function utcDate(ts) {
         if (!ts) {
             return null;
@@ -348,6 +360,7 @@ function applyTimeAxis(uplot_opts) {
         return uPlot.tzDate(new Date(ts * 1e3), 'Etc/UTC');
     }
 
+    const axisDateFmt = axisFmt ? uPlot.fmtDate(axisFmt) : null;
     const fullDate = uPlot.fmtDate("{HH}:{mm}\n{YYYY}-{MM}-{DD}");
     const dayDate = uPlot.fmtDate("{HH}:{mm}\n{MM}-{DD}");
     const hourDate = uPlot.fmtDate("{HH}:{mm}");
@@ -356,6 +369,9 @@ function applyTimeAxis(uplot_opts) {
     uplot_opts.axes[0].values = (u, vals, space) => {
         return vals.map((v, i) => {
             const d = utcDate(v);
+            if (axisDateFmt) {
+                return axisDateFmt(d)
+            }
             const prev = i > 0 ? vals[i - 1] : null;
             if (!prev || !v) {
                 return fullDate(d)

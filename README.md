@@ -80,6 +80,12 @@ First column is used for X axis, remaining columns go to Y axis.
 
 X-axis can be a UTC datetime if values are UNIX timestamp integers and statement has a comment `-- plot:time`.
 
+Use `-- plot:time_axis_fmt={YYYY}-{MM}` to override time axis label format (default is `{HH}:{mm}\n{YYYY}-{MM}-{DD}`).
+
+Use `-- plot:caption=My dataset` to set a plot caption.
+
+Use `-- plot:height=360px` to override plot height.
+
 For stacked bars, add `-- plot:stacked_bars`. Combine with `-- plot:rows` for `x, y, label` shape or omit for `x, y1, y2...`.
 
 If a statement has `-- plot:pie` in comment, result is rendered as a pie chart.
