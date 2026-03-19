@@ -91,29 +91,7 @@ function renderResult(result, idx) {
 
     let uplot_opts = null;
     let uplot_data = null;
-    let bars_opts = null;
-    let bars_data = null;
     let pie_data = null;
-
-    if (result.statement.includes("-- bars:rows") || result.statement.includes("-- bars:time")) {
-        res += '<div id="bars-' + idx + '"></div>'
-
-        bars_opts = uplotOpts()
-
-        if (result.statement.includes("-- bars:time")) {
-            bars_opts.scales.x.time = true;
-        }
-
-        if (result.statement.includes("-- bars:rows")) {
-            bars_data = uplotBarsRowsData(result, bars_opts)
-        } else {
-            bars_data = uplotBarsColumnsData(result, bars_opts)
-        }
-
-        if (result.statement.includes("-- bars:time")) {
-            applyTimeAxis(bars_opts)
-        }
-    }
 
     if (result.statement.includes("-- plot")) {
         res += '<div id="plot-' + idx + '"></div>'
@@ -124,7 +102,13 @@ function renderResult(result, idx) {
             uplot_opts.scales.x.time = true;
         }
 
-        if (result.statement.includes('-- plot:rows')) {
+        if (result.statement.includes('-- plot:stacked_bars')) {
+            if (result.statement.includes('-- plot:rows')) {
+                uplot_data = uplotBarsRowsData(result, uplot_opts)
+            } else {
+                uplot_data = uplotBarsColumnsData(result, uplot_opts)
+            }
+        } else if (result.statement.includes('-- plot:rows')) {
             uplot_data = uplotRowsData(result, uplot_opts)
         } else {
             uplot_data = uplotColumnsData(result, uplot_opts)
@@ -135,7 +119,7 @@ function renderResult(result, idx) {
         }
     }
 
-    if (result.statement.includes("-- pie") && result.values.length > 1) {
+    if (result.statement.includes("-- plot:pie") && result.values.length > 1) {
         res += '<div id="pie-' + idx + '"></div>'
 
         // Sorting data by first column (count) descending.
@@ -163,7 +147,7 @@ function renderResult(result, idx) {
         }
     }
 
-    if (!uplot_opts && !bars_opts && !pie_data) {
+    if (!uplot_opts && !pie_data) {
         let transpose = result.statement.includes("-- transpose")
 
         if (transpose) {
@@ -182,12 +166,8 @@ function renderResult(result, idx) {
         new uPlot(uplot_opts, uplot_data, document.getElementById("plot-" + idx));
     }
 
-    if (bars_opts && bars_data) {
-        new uPlot(bars_opts, bars_data, document.getElementById("bars-" + idx));
-    }
-
     if (pie_data) {
-        var m = result.statement.match(/pie:total=(\d+)/)
+        var m = result.statement.match(/plot:pie:total=(\d+)/)
         var total = 0
         if (m && m[1]) {
             total = parseFloat(m[1])
