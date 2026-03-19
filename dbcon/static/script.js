@@ -91,51 +91,47 @@ function renderResult(result, idx) {
 
     let uplot_opts = null;
     let uplot_data = null;
-    let bars_opts = null;
-    let bars_data = null;
     let pie_data = null;
-
-    if (result.statement.includes("-- bars:rows") || result.statement.includes("-- bars:time")) {
-        res += '<div id="bars-' + idx + '"></div>'
-
-        bars_opts = uplotOpts()
-
-        if (result.statement.includes("-- bars:time")) {
-            bars_opts.scales.x.time = true;
-        }
-
-        if (result.statement.includes("-- bars:rows")) {
-            bars_data = uplotBarsRowsData(result, bars_opts)
-        } else {
-            bars_data = uplotBarsColumnsData(result, bars_opts)
-        }
-
-        if (result.statement.includes("-- bars:time")) {
-            applyTimeAxis(bars_opts)
-        }
-    }
 
     if (result.statement.includes("-- plot")) {
         res += '<div id="plot-' + idx + '"></div>'
 
         uplot_opts = uplotOpts()
 
+        let captionMatch = result.statement.match(/plot:caption=(.+)/)
+        if (captionMatch && captionMatch[1]) {
+            uplot_opts.title = captionMatch[1].trim()
+        }
+
+        let heightMatch = result.statement.match(/plot:height=(\d+)(?:px)?/)
+        if (heightMatch && heightMatch[1]) {
+            uplot_opts.height = parseInt(heightMatch[1], 10)
+        }
+
         if (result.statement.includes('-- plot:time')) {
             uplot_opts.scales.x.time = true;
         }
 
-        if (result.statement.includes('-- plot:rows')) {
+        if (result.statement.includes('-- plot:stacked_bars')) {
+            if (result.statement.includes('-- plot:rows')) {
+                uplot_data = uplotBarsRowsData(result, uplot_opts)
+            } else {
+                uplot_data = uplotBarsColumnsData(result, uplot_opts)
+            }
+        } else if (result.statement.includes('-- plot:rows')) {
             uplot_data = uplotRowsData(result, uplot_opts)
         } else {
             uplot_data = uplotColumnsData(result, uplot_opts)
         }
 
         if (result.statement.includes('-- plot:time')) {
-            applyTimeAxis(uplot_opts)
+            let m = result.statement.match(/plot:time_axis_fmt=([^\s]+)/)
+            let axisFmt = m && m[1] ? m[1] : null
+            applyTimeAxis(uplot_opts, axisFmt)
         }
     }
 
-    if (result.statement.includes("-- pie") && result.values.length > 1) {
+    if (result.statement.includes("-- plot:pie") && result.values.length > 1) {
         res += '<div id="pie-' + idx + '"></div>'
 
         // Sorting data by first column (count) descending.
@@ -163,7 +159,7 @@ function renderResult(result, idx) {
         }
     }
 
-    if (!uplot_opts && !bars_opts && !pie_data) {
+    if (!uplot_opts && !pie_data) {
         let transpose = result.statement.includes("-- transpose")
 
         if (transpose) {
@@ -182,12 +178,8 @@ function renderResult(result, idx) {
         new uPlot(uplot_opts, uplot_data, document.getElementById("plot-" + idx));
     }
 
-    if (bars_opts && bars_data) {
-        new uPlot(bars_opts, bars_data, document.getElementById("bars-" + idx));
-    }
-
     if (pie_data) {
-        var m = result.statement.match(/pie:total=(\d+)/)
+        var m = result.statement.match(/plot:pie:total=(\d+)/)
         var total = 0
         if (m && m[1]) {
             total = parseFloat(m[1])
@@ -359,7 +351,7 @@ function toNumberOrNull(v) {
     return Number.isFinite(n) ? n : null;
 }
 
-function applyTimeAxis(uplot_opts) {
+function applyTimeAxis(uplot_opts, axisFmt) {
     function utcDate(ts) {
         if (!ts) {
             return null;
@@ -368,6 +360,7 @@ function applyTimeAxis(uplot_opts) {
         return uPlot.tzDate(new Date(ts * 1e3), 'Etc/UTC');
     }
 
+    const axisDateFmt = axisFmt ? uPlot.fmtDate(axisFmt) : null;
     const fullDate = uPlot.fmtDate("{HH}:{mm}\n{YYYY}-{MM}-{DD}");
     const dayDate = uPlot.fmtDate("{HH}:{mm}\n{MM}-{DD}");
     const hourDate = uPlot.fmtDate("{HH}:{mm}");
@@ -376,6 +369,9 @@ function applyTimeAxis(uplot_opts) {
     uplot_opts.axes[0].values = (u, vals, space) => {
         return vals.map((v, i) => {
             const d = utcDate(v);
+            if (axisDateFmt) {
+                return axisDateFmt(d)
+            }
             const prev = i > 0 ? vals[i - 1] : null;
             if (!prev || !v) {
                 return fullDate(d)
@@ -404,7 +400,7 @@ function applyTimeAxis(uplot_opts) {
     }
 }
 
-function stack(data, omit) {
+function stack(data, omit, fillNulls) {
     let data2 = [];
     let bands = [];
     let d0Len = data[0].length;
@@ -417,11 +413,11 @@ function stack(data, omit) {
     for (let i = 1; i < data.length; i++) {
         data2.push(omit(i) ? data[i] : data[i].map((v, i) => {
             if (v === null || typeof v === 'undefined') {
-                return null;
+                return fillNulls ? accum[i] : null;
             }
             let n = +v;
             if (!Number.isFinite(n)) {
-                return null;
+                return fillNulls ? accum[i] : null;
             }
             return (accum[i] += n);
         }));
@@ -447,7 +443,7 @@ function stack(data, omit) {
 function getStackedOpts(uplot_opts, series, data) {
     uplot_opts.series = series;
 
-    let stacked = stack(data, i => false);
+    let stacked = stack(data, i => false, true);
     uplot_opts.bands = stacked.bands;
 
     uplot_opts.cursor = uplot_opts.cursor || {};
@@ -484,7 +480,7 @@ function getStackedOpts(uplot_opts, series, data) {
     uplot_opts.hooks = uplot_opts.hooks || {};
     uplot_opts.hooks.setSeries = uplot_opts.hooks.setSeries || [];
     uplot_opts.hooks.setSeries.push((u, i) => {
-        let stacked = stack(data, i => !u.series[i].show);
+        let stacked = stack(data, i => !u.series[i].show, true);
         u.delBand(null);
         stacked.bands.forEach(b => u.addBand(b));
         u.setData(stacked.data);
@@ -515,64 +511,69 @@ function buildStackedBarsSeries(columns) {
 }
 
 /**
+ * Build rows-based data (x, y, label) into uPlot columnar data.
+ * @param {Result} result
+ * @returns {{uplot_data: Array<Array<*>>, labelsArr: Array<string>}}
+ */
+function buildRowsData(result) {
+    let timedData = {}
+    let labels = {}
+
+    for (let i in result.values) {
+        let row = result.values[i]
+        let t = toNumberOrNull(row[0])
+        let val = toNumberOrNull(row[1])
+        let label = row[2]
+
+        if (t === null || typeof label === 'undefined') {
+            continue;
+        }
+
+        labels[label] = 1
+        let key = String(t)
+        if (!timedData[key]) {
+            timedData[key] = {};
+        }
+        timedData[key][label] = val
+    }
+
+    let labelsArr = Object.keys(labels).sort()
+
+    let uplot_data = []
+    for (let i = 0; i < 1 + labelsArr.length; i++) {
+        uplot_data.push([])
+    }
+
+    let xVals = Object.keys(timedData)
+        .map(k => parseFloat(k))
+        .filter(Number.isFinite)
+    xVals.sort((a, b) => a - b)
+
+    for (let xi = 0; xi < xVals.length; xi++) {
+        let t = xVals[xi]
+        uplot_data[0].push(t)
+
+        let values = timedData[String(t)] || {}
+        for (let li = 0; li < labelsArr.length; li++) {
+            let label = labelsArr[li]
+            let val = values[label]
+            uplot_data[1 + li].push(typeof val === 'undefined' ? null : val)
+        }
+    }
+
+    return {uplot_data, labelsArr}
+}
+
+/**
  *
  * @param {Result} result
  * @param uplot_opts
  * @returns {[]}
  */
 function uplotRowsData(result, uplot_opts) {
-    let uplot_data = [];
-
-    let timedData = {}
-    let labels = {}
-
-    for (let i in result.values) {
-        let value = result.values[i]
-        labels[value[2]] = 1
-
-        let t = value[0]
-        let val = value[1]
-        let label = value[2]
-        if (!timedData[t]) {
-            timedData[t] = {};
-        }
-
-        timedData[t][label] = val
-    }
-
-    // Series for X.
-    uplot_data.push([])
-
-    // Series for Y.
-    let labelsArr = []
-    for (let label in labels) {
-        uplot_data.push([])
-        labelsArr.push(label)
-    }
-    labelsArr = labelsArr.sort()
-
-    for (let t in timedData) {
-        uplot_data[0].push(parseFloat(t))
-    }
-
-    uplot_data[0].sort()
-
-    for (let tt = 0; tt < uplot_data[0].length; tt++) {
-        var values = timedData[uplot_data[0][tt]]
-
-        for (let i = 0; i < labelsArr.length; i++) {
-            let l = labelsArr[i]
-            let val = values[l]
-
-            if (typeof val === 'undefined') {
-                val = null
-            } else {
-                val = parseFloat(val)
-            }
-
-            uplot_data[1 + i].push(val)
-        }
-    }
+    let built = buildRowsData(result)
+    let uplot_data = built.uplot_data
+    let labelsArr = built.labelsArr
 
     uplot_opts.series.push({
         label: result.columns[0],
@@ -595,48 +596,10 @@ function uplotRowsData(result, uplot_opts) {
  * @returns {[]}
  */
 function uplotBarsRowsData(result, uplot_opts) {
-    let timedData = {}
-    let labels = {}
-
-    for (let i in result.values) {
-        let row = result.values[i]
-        let t = toNumberOrNull(row[0])
-        let val = toNumberOrNull(row[1])
-        let label = row[2]
-
-        if (t === null || typeof label === 'undefined') {
-            continue;
-        }
-
-        labels[label] = 1
-        if (!timedData[t]) {
-            timedData[t] = {};
-        }
-        timedData[t][label] = val
-    }
-
-    let labelsArr = Object.keys(labels).sort()
+    let built = buildRowsData(result)
+    let uplot_data = built.uplot_data
+    let labelsArr = built.labelsArr
     let series = buildStackedBarsSeries([result.columns[0]].concat(labelsArr))
-
-    let uplot_data = []
-    for (let i = 0; i < 1 + labelsArr.length; i++) {
-        uplot_data.push([])
-    }
-
-    let xVals = Object.keys(timedData).map(k => parseFloat(k)).filter(Number.isFinite)
-    xVals.sort((a, b) => a - b)
-
-    for (let xi = 0; xi < xVals.length; xi++) {
-        let t = xVals[xi]
-        uplot_data[0].push(t)
-
-        let values = timedData[t] || {}
-        for (let li = 0; li < labelsArr.length; li++) {
-            let label = labelsArr[li]
-            let val = values[label]
-            uplot_data[1 + li].push(typeof val === 'undefined' ? null : val)
-        }
-    }
 
     let stacked = getStackedOpts(uplot_opts, series, uplot_data);
 

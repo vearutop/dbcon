@@ -80,11 +80,19 @@ First column is used for X axis, remaining columns go to Y axis.
 
 X-axis can be a UTC datetime if values are UNIX timestamp integers and statement has a comment `-- plot:time`.
 
-If a statement has `-- pie` in comment, result is rendered as a pie chart.
+Use `-- plot:time_axis_fmt={YYYY}-{MM}` to override time axis label format (default is `{HH}:{mm}\n{YYYY}-{MM}-{DD}`).
+
+Use `-- plot:caption=My dataset` to set a plot caption.
+
+Use `-- plot:height=360px` to override plot height.
+
+For stacked bars, add `-- plot:stacked_bars`. Combine with `-- plot:rows` for `x, y, label` shape or omit for `x, y1, y2...`.
+
+If a statement has `-- plot:pie` in comment, result is rendered as a pie chart.
 
 First column is used for the numeric value of pie slice, second is a label.
 
-Pie total is calculated as sum of all values, for cases of partial pie you can provide the total with `-- pie:total=123`.
+Pie total is calculated as sum of all values, for cases of partial pie you can provide the total with `-- plot:pie:total=123`.
 
 ## AI Assistance
 
