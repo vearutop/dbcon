@@ -97,6 +97,7 @@ function renderResult(result, idx) {
         res += '<div id="plot-' + idx + '"></div>'
 
         uplot_opts = uplotOpts()
+        applyLegendSortOnHover(uplot_opts)
 
         let captionMatch = result.statement.match(/plot:caption=(.+)/)
         if (captionMatch && captionMatch[1]) {
@@ -340,6 +341,101 @@ function uplotOpts() {
     };
 }
 
+function applyLegendSortOnHover(uplot_opts) {
+    uplot_opts.hooks = uplot_opts.hooks || {};
+    uplot_opts.hooks.init = uplot_opts.hooks.init || [];
+    uplot_opts.hooks.init.push((u) => {
+        const legend = u.root.querySelector(".u-legend");
+        if (!legend) {
+            return;
+        }
+        const rows = Array.from(legend.querySelectorAll(".u-series"));
+        let needsIdx = false;
+        for (let i = 0; i < rows.length; i++) {
+            if (!rows[i].hasAttribute("data-idx")) {
+                needsIdx = true;
+                break;
+            }
+        }
+        if (needsIdx) {
+            for (let i = 0; i < rows.length && i < u.series.length; i++) {
+                rows[i].setAttribute("data-idx", String(i));
+            }
+        }
+
+        if (uplot_opts._legendSortData) {
+            u._legendSortData = uplot_opts._legendSortData;
+        }
+    });
+
+    uplot_opts.hooks.setLegend = uplot_opts.hooks.setLegend || [];
+    uplot_opts.hooks.setLegend.push((u) => {
+        if (!u.cursor || u.cursor.idx == null) {
+            return;
+        }
+
+        const legend = u.root.querySelector(".u-legend");
+        if (!legend) {
+            return;
+        }
+
+        const rows = Array.from(legend.querySelectorAll(".u-series"));
+        if (rows.length <= 2) {
+            return;
+        }
+
+        const rowMap = new Map();
+        rows.forEach((row) => {
+            const idxAttr = row.getAttribute("data-idx");
+            const idx = idxAttr != null ? parseInt(idxAttr, 10) : null;
+            if (Number.isFinite(idx)) {
+                rowMap.set(idx, row);
+            }
+        });
+
+        const idxs = u.cursor.idxs || [];
+        const hasValue = (si) => idxs[si] != null;
+        const dataSource = u._legendSortData || u.data;
+        const valueFor = (si) => {
+            const idx = idxs[si];
+            if (idx == null) {
+                return null;
+            }
+            const v = dataSource[si] ? dataSource[si][idx] : null;
+            if (v === null || typeof v === 'undefined') {
+                return null;
+            }
+            const n = +v;
+            return Number.isFinite(n) ? n : 0;
+        };
+
+        const order = [0];
+        const withVals = [];
+        const withoutVals = [];
+
+        for (let si = 1; si < u.series.length; si++) {
+            if (!rowMap.has(si)) {
+                continue;
+            }
+            if (hasValue(si)) {
+                withVals.push(si);
+            } else {
+                withoutVals.push(si);
+            }
+        }
+
+        withVals.sort((a, b) => valueFor(b) - valueFor(a));
+        order.push(...withVals, ...withoutVals);
+
+        for (let i = 0; i < order.length; i++) {
+            const row = rowMap.get(order[i]);
+            if (row) {
+                legend.appendChild(row);
+            }
+        }
+    });
+}
+
 function toNumberOrNull(v) {
     if (v === null || typeof v === 'undefined') {
         return null;
@@ -442,6 +538,7 @@ function stack(data, omit, fillNulls) {
 
 function getStackedOpts(uplot_opts, series, data) {
     uplot_opts.series = series;
+    uplot_opts._legendSortData = data;
 
     let stacked = stack(data, i => false, true);
     uplot_opts.bands = stacked.bands;
