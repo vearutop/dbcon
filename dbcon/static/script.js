@@ -982,7 +982,7 @@ function fancyTable(options) {
             if (!elm.fancyTable.fuzzyHaystack || elm.fancyTable.fuzzyHaystack.length !== $(elm).find("tbody tr").length) {
                 buildFuzzyIndex(elm);
             }
-            let res = elm.fancyTable.fuzzy.search(elm.fancyTable.fuzzyHaystack || [], elm.fancyTable.search);
+            let res = elm.fancyTable.fuzzy.search(elm.fancyTable.fuzzyHaystack || [], elm.fancyTable.search, 1);
             let idxs = (res && res[0]) ? res[0] : [];
             let order = res ? res[2] : null;
             let matched = order && order.length ? order.map(i => idxs[i]) : idxs;
