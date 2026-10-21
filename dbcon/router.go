@@ -3,9 +3,11 @@ package dbcon
 import (
 	"embed"
 	"net/http"
+	"strings"
 
 	"github.com/swaggest/openapi-go/openapi31"
 	"github.com/swaggest/rest/web"
+	"github.com/vearutop/plot-go"
 	"github.com/vearutop/statigz"
 )
 
@@ -28,7 +30,14 @@ func Mount(s *web.Service, prefix string, deps Deps, options ...func(*Options)) 
 	s.Post("/refresh-schema", RefreshSchema(deps, options...))
 
 	s.Mount("/", http.StripPrefix(prefix, staticServer))
+	s.Mount(plotPrefix(prefix), http.StripPrefix(plotPrefix(prefix), plot.Handler()))
 	deps.SchemaRepository().Mount(s, "/json-form/")
+}
+
+// plotPrefix is where the plot package's static assets (uPlot, chart rendering script) are
+// served from, so DBConsole can point HeadTags at the same path.
+func plotPrefix(prefix string) string {
+	return strings.TrimSuffix(prefix, "/") + "/plot/"
 }
 
 // Handler creates an HTTP handler.

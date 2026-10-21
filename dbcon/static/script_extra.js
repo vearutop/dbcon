@@ -27,6 +27,19 @@ function get(url) {
     return res
 }
 
+// scriptSrcEndingWith finds the resolved src of a <script> tag already on the page whose URL
+// ends with suffix, so the portable report bundles assets from wherever they are actually
+// mounted (e.g. the plot package's own path prefix) instead of a hardcoded root path.
+function scriptSrcEndingWith(suffix) {
+    var scripts = document.getElementsByTagName('script')
+    for (var i = 0; i < scripts.length; i++) {
+        if (scripts[i].src && scripts[i].src.endsWith(suffix)) {
+            return scripts[i].src
+        }
+    }
+    return suffix
+}
+
 function downloadHTMLReport() {
     if (!results) {
         alert("No results.");
@@ -54,8 +67,9 @@ function downloadHTMLReport() {
 
     var js = ""
     js += get("/json-form/jquery-3.7.1.min.js") + "\n"
-    js += get("/uPlot.iife.min.js") + "\n"
+    js += get(scriptSrcEndingWith("uPlot.iife.min.js")) + "\n"
     js += get("/uFuzzy.iife.js") + "\n"
+    js += get(scriptSrcEndingWith("plot.js")) + "\n"
     js += get("/script.js") + "\n"
 
     results = rtemp
