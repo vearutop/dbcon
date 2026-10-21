@@ -5,11 +5,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/csv"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/swaggest/rest/response"
 	"github.com/swaggest/usecase"
@@ -55,32 +53,9 @@ func DBQueryCSV(deps Deps, options ...func(*Options)) usecase.Interactor {
 		rw.Header().Set("Content-Disposition", "attachment; filename=\"data.csv\"")
 		rw.Header().Set("Content-Transfer-Encoding", "binary")
 
-		w := csv.NewWriter(rw)
-
-		if err := w.Write(res.Columns); err != nil {
+		if err := writeCSVRows(csv.NewWriter(rw), res.Columns, res.Values); err != nil {
 			log.Println("csv write failed:", err.Error())
 		}
-
-		for i := 0; i < len(res.Values); i++ {
-			values := res.Values[i]
-
-			var row []string
-
-			for _, v := range values {
-				j, err := json.Marshal(v)
-				if err != nil {
-					return err
-				}
-
-				row = append(row, strings.Trim(string(j), `"`))
-			}
-
-			if err := w.Write(row); err != nil {
-				log.Println("csv write failed:", err.Error())
-			}
-		}
-
-		w.Flush()
 
 		return nil
 	})

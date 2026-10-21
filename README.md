@@ -94,6 +94,19 @@ First column is used for the numeric value of pie slice, second is a label.
 
 Pie total is calculated as sum of all values, for cases of partial pie you can provide the total with `-- plot:pie:total=123`.
 
+## CSV Import/Export
+
+`-- csv:import=<file|glob>` as a statement of its own imports a CSV file into a table on the
+selected instance, all as `TEXT` columns. Paths are resolved relative to dbcon's working
+directory (absolute paths and `..` are rejected).
+
+* By default the table name comes from the file name, and the first CSV row is used as header. Override with `into=table_name`.
+* `header=false` treats every row as data. Combine with `cols=a,b,c` to name the columns, or omit `cols=` to reuse the columns of an already existing table.
+* If the target table already exists, the import is skipped (so re-running the same query is safe), unless `header=false`, `cols=`, or `append=true` is given, in which case rows are inserted into it.
+* A glob, e.g. `-- csv:import=data_*.csv into=my_table`, loads every match into the same table (`into=` is then required).
+
+`-- csv:export=<file>` on a `SELECT` statement streams its result straight into a CSV file in dbcon's working directory, instead of returning it to the console (which reports only the row count once done). Rows are written as they come off the DB driver, without buffering the full result in memory, so this also works for selections too large to hold in memory or ship back as JSON.
+
 ## AI Assistance
 
 LLM can help to translate a query in natural language into SQL. You can enable LLM support by configuring credentials

@@ -5,12 +5,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
-	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -139,7 +137,9 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 				return err
 			}
 
-			if err := importCSV(tempInstance.Instance, dsn); err != nil {
+			table := strings.TrimSuffix(path.Base(dsn), ".csv")
+
+			if _, err := dbcon.ImportCSV(context.Background(), tempInstance.Instance, sqluct.DialectSQLite3, dsn, table, true, nil, true); err != nil {
 				return fmt.Errorf("failed to import CSV: %w", err)
 			}
 
@@ -395,90 +395,6 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 	}
 
 	sh.Wait()
-
-	return nil
-}
-
-func importCSV(db *sql.DB, file string) error {
-	f, err := os.Open(file) //nolint:gosec
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		if err := f.Close(); err != nil {
-			log.Println("failed to close file:", err.Error())
-		}
-	}()
-
-	r := csv.NewReader(f)
-
-	columns, err := r.Read()
-	if err != nil {
-		return err
-	}
-
-	tableName := sqluct.QuoteBackticks(strings.TrimSuffix(path.Base(file), ".csv"))
-	createTable := "CREATE TABLE " + tableName + " ("
-
-	for _, column := range columns {
-		createTable += sqluct.QuoteBackticks(column) + ", "
-	}
-
-	createTable = strings.TrimSuffix(createTable, ", ") + ")"
-
-	_, err = db.Exec(createTable)
-	if err != nil {
-		return err
-	}
-
-	args := make([]any, len(columns))
-	stmt := "INSERT INTO " + tableName + " VALUES (" + strings.TrimSuffix(strings.Repeat("?,", len(columns)), ",") + ")" //nolint:gosec
-
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-
-	txCnt := 0
-
-	for {
-		record, err := r.Read()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-
-		if err != nil {
-			return err
-		}
-
-		for i, v := range record {
-			args[i] = v
-		}
-
-		if _, err := tx.Exec(stmt, args...); err != nil {
-			return err
-		}
-
-		txCnt++
-
-		if txCnt >= 1000 {
-			if err := tx.Commit(); err != nil {
-				return err
-			}
-
-			txCnt = 0
-
-			tx, err = db.Begin()
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return err
-	}
 
 	return nil
 }

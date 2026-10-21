@@ -5,8 +5,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -91,17 +93,17 @@ func DBQuery(deps Deps, options ...func(*Options)) usecase.Interactor {
 }
 
 func queryInstance(ctx context.Context, deps Deps, query dbQuery, results []Result, o Options) []Result {
-	var db *sql.DB
+	var inst *DBInstance
 
-	for _, v := range deps.DBInstances() {
+	for i, v := range deps.DBInstances() {
 		if v.Name == string(query.Instance) {
-			db = v.Instance
+			inst = &deps.DBInstances()[i]
 
 			break
 		}
 	}
 
-	if db == nil {
+	if inst == nil {
 		result := Result{
 			Instance: string(query.Instance),
 			Error:    fmt.Sprintf("unknown instance: %s", query.Instance),
@@ -112,7 +114,13 @@ func queryInstance(ctx context.Context, deps Deps, query dbQuery, results []Resu
 	}
 
 	for _, statement := range SplitStatements(query.Statement) {
-		results = append(results, makeResult(ctx, db, string(query.Instance), statement, o))
+		if result, ok := tryCSVImport(ctx, inst.Instance, inst.Dialect, string(query.Instance), statement); ok {
+			results = append(results, result)
+
+			continue
+		}
+
+		results = append(results, makeResult(ctx, inst.Instance, string(query.Instance), statement, o))
 	}
 
 	return results
@@ -161,11 +169,48 @@ func makeResult(ctx context.Context, db *sql.DB, instance, statement string, o O
 		}
 	}()
 
-	result.Columns = cols
+	// A `-- csv:export=` statement streams rows straight to a file instead of buffering them
+	// into the result, so a selection too large to hold in memory (or to ship back as JSON)
+	// can still be exported.
+	exportFile, exporting := parseCSVExport(statement)
+
+	var csvW *csv.Writer
+
+	if exporting {
+		path, err := resolveWorkPath(exportFile)
+		if err != nil {
+			result.Error = err.Error()
+
+			return result
+		}
+
+		f, err := os.Create(path) //nolint:gosec
+		if err != nil {
+			result.Error = err.Error()
+
+			return result
+		}
+
+		defer func() {
+			_ = f.Close() //nolint:errcheck
+		}()
+
+		csvW = csv.NewWriter(f)
+
+		if err := csvW.Write(cols); err != nil {
+			result.Error = err.Error()
+
+			return result
+		}
+	} else {
+		result.Columns = cols
+	}
+
+	rowCount := 0
 
 	for rows.Next() {
-		values := make([]interface{}, len(cols))
-		valuePointers := make([]interface{}, len(cols))
+		values := make([]any, len(cols))
+		valuePointers := make([]any, len(cols))
 
 		for i := range values {
 			valuePointers[i] = &values[i]
@@ -197,7 +242,45 @@ func makeResult(ctx context.Context, db *sql.DB, instance, statement string, o O
 			}
 		}
 
+		rowCount++
+
+		if exporting {
+			rec := make([]string, len(cols))
+
+			for i, v := range values {
+				c, err := csvCell(v)
+				if err != nil {
+					result.Error = err.Error()
+
+					return result
+				}
+
+				rec[i] = c
+			}
+
+			if err := csvW.Write(rec); err != nil {
+				result.Error = err.Error()
+
+				return result
+			}
+
+			continue
+		}
+
 		result.Values = append(result.Values, values)
+	}
+
+	if exporting {
+		csvW.Flush()
+
+		if err := csvW.Error(); err != nil {
+			result.Error = err.Error()
+
+			return result
+		}
+
+		result.Columns = []string{"csv_export"}
+		result.Values = [][]any{{fmt.Sprintf("streamed %d rows to %s", rowCount, exportFile)}}
 	}
 
 	return result
