@@ -14,7 +14,7 @@ import (
 // https://ai.google.dev/gemini-api/docs/vision?lang=rest&authuser=1
 
 /*
-curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=GEMINI_API_KEY" \
+curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=GEMINI_API_KEY" \
 -H 'Content-Type: application/json' \
 -X POST \
 -d '{
@@ -76,10 +76,16 @@ type Response struct {
 		} `json:"citationMetadata"`
 		AvgLogprobs float64 `json:"avgLogprobs"`
 	} `json:"candidates"`
+	// PromptFeedback carries the block reason when the prompt was rejected before any
+	// candidate was produced (e.g. by a safety filter), in which case Candidates is empty.
+	PromptFeedback struct {
+		BlockReason string `json:"blockReason"`
+	} `json:"promptFeedback"`
 	UsageMetadata struct {
 		PromptTokenCount     int `json:"promptTokenCount"`
 		CandidatesTokenCount int `json:"candidatesTokenCount"`
 		TotalTokenCount      int `json:"totalTokenCount"`
+		ThoughtsTokenCount   int `json:"thoughtsTokenCount"`
 		PromptTokensDetails  []struct {
 			Modality   string `json:"modality"`
 			TokenCount int    `json:"tokenCount"`
@@ -90,6 +96,14 @@ type Response struct {
 		} `json:"candidatesTokensDetails"`
 	} `json:"usageMetadata"`
 	ModelVersion string `json:"modelVersion"`
+	ResponseID   string `json:"responseId"`
+	// Error is populated instead of Candidates when the request itself failed
+	// (bad API key, quota exceeded, invalid argument, ...).
+	Error struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Status  string `json:"status"`
+	} `json:"error"`
 }
 
 // Model returns the name of LLM.
@@ -98,7 +112,7 @@ func (ip *Prompter) Model() string {
 		return ip.ModelName
 	}
 
-	return "gemini-2.5-flash"
+	return "gemini-3.5-flash-lite"
 }
 
 // Prompt asks LLM to translate a question to SQL statement.
@@ -166,7 +180,15 @@ func (ip *Prompter) Prompt(ctx context.Context, prompt string) (string, error) {
 		return "", err
 	}
 
+	if re.Error.Message != "" {
+		return "", errors.New(re.Error.Message)
+	}
+
 	if len(re.Candidates) == 0 {
+		if re.PromptFeedback.BlockReason != "" {
+			return "", errors.New("prompt blocked: " + re.PromptFeedback.BlockReason)
+		}
+
 		return "", errors.New("no candidates found")
 	}
 
