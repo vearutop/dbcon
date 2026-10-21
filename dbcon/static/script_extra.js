@@ -214,6 +214,33 @@ function toggleColumnsDirectory() {
     return false;
 }
 
+function refreshSchema() {
+    var btn = $('#refresh-schema')
+    btn.addClass('spinner').text('Refreshing...')
+
+    $.ajax({
+        type: 'POST',
+        url: '/refresh-schema',
+        success: function (data) {
+            completions = data.completions
+
+            renderColumnsDirectory();
+
+            $(".sql-statement").each(function (i, el) {
+                $(el).parent().find('select').trigger('change');
+            });
+        },
+        error: function (x) {
+            alert("Failed to refresh schema: " + x.responseText);
+        },
+        complete: function () {
+            btn.removeClass('spinner').text('Refresh Schema');
+        }
+    });
+
+    return false;
+}
+
 window.jsonform_ace_setup = function(setup){
     setup()
 

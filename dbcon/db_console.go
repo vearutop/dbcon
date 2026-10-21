@@ -176,40 +176,14 @@ func DBConsole(deps Deps, prefix string, options ...func(*Options)) usecase.Inte
 		option(&o)
 	}
 
-	completions := map[string][]SQLCompletion{}
-	cmp := []SQLCompletion{ //nolint:prealloc
-		{Value: "-- plot:cols", Score: 1000, Meta: "exp cols: x, y1, y2, ..."},
-		{Value: "-- plot:rows", Score: 1000, Meta: "exp cols: x, y, label"},
-		{Value: "-- plot:time", Score: 1000, Meta: "time series"},
-		{Value: "-- plot:time_axis_fmt={YYYY}-{MM}", Score: 1000, Meta: "time axis format, default {HH}:{mm}\\n{YYYY}-{MM}-{DD}"},
-		{Value: "-- plot:caption=My dataset", Score: 1000, Meta: "plot caption"},
-		{Value: "-- plot:height=360px", Score: 1000, Meta: "plot height"},
-		{Value: "-- plot:stacked_bars", Score: 1000, Meta: "stacked bars"},
-		{Value: "-- plot:pie", Score: 1000, Meta: "exp cols: count, label"},
-		{Value: "-- plot:pie:total=X", Score: 1000, Meta: "override total count"},
-		{Value: "-- strip", Score: 1000, Meta: "render data only"},
-		{Value: "-- # ", Score: 1000, Meta: "add header"},
-		{Value: "-- > ", Score: 1000, Meta: "add description"},
-		{Value: "-- transpose", Score: 1000, Meta: "transpose result"},
-		{Value: "-- transpose:skip_similar", Score: 1000, Meta: "transpose result for diff"},
-	}
-
-	cmp = append(cmp, o.Completions...)
-
-	for k := range o.valueProcessor {
-		cmp = append(cmp, SQLCompletion{Value: "-- " + k + ":column_name", Score: 1000, Meta: "value processor"})
-	}
-
-	for _, v := range deps.DBInstances() {
-		completions[v.Name] = append(v.Completions, cmp...)
-	}
-
 	u := usecase.NewInteractor(func(ctx context.Context, in req, out *response.EmbeddedSetter) error {
 		p := jsonform.Page{}
 
 		p.Title = "DB Console"
 
-		j, err := json.Marshal(completions)
+		// Rebuilt per request (not cached at Mount time) so a schema refresh from any tab
+		// is visible to every new page load, including ones opened from a shared link.
+		j, err := json.Marshal(buildCompletions(deps, o))
 		if err != nil {
 			return err
 		}
@@ -281,7 +255,7 @@ renderColumnsDirectory();
 			OnSuccess:         `onPromptSuccess`,
 			OnBeforeSubmit:    `onPromptBeforeSubmit`,
 			OnRequestFinished: `onPromptFinished`,
-			BeforeForm:        `<div id="columns-directory" class="pure-u-2-5" style="position: absolute"></div><div style="position: absolute;margin-left: 160px" class="ai btn btn-info" onclick="return toggleAskAI();">Ask AI 🤖</div>`,
+			BeforeForm:        `<div id="columns-directory" class="pure-u-2-5" style="position: absolute"></div><div id="refresh-schema" style="position: absolute;margin-left: 160px" class="btn btn-info" onclick="return refreshSchema();">Refresh Schema</div><div style="position: absolute;margin-left: 320px" class="ai btn btn-info" onclick="return toggleAskAI();">Ask AI 🤖</div>`,
 		}
 
 		if deps.Prompter() == nil {

@@ -25,6 +25,7 @@ func Mount(s *web.Service, prefix string, deps Deps, options ...func(*Options)) 
 	s.Post("/query-db", DBQuery(deps, options...))
 	s.Get("/query-db.csv", DBQueryCSV(deps, options...))
 	s.Post("/prompt", Prompt(deps))
+	s.Post("/refresh-schema", RefreshSchema(deps, options...))
 
 	s.Mount("/", http.StripPrefix(prefix, staticServer))
 	deps.SchemaRepository().Mount(s, "/json-form/")
