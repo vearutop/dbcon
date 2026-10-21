@@ -17,7 +17,7 @@ func TestMakeResult_CSVExport(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
 
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = db.Close() }) //nolint:errcheck
 
 	_, err = db.ExecContext(ctx, "CREATE TABLE t (a INTEGER, b TEXT)")
 	require.NoError(t, err)
@@ -27,8 +27,10 @@ func TestMakeResult_CSVExport(t *testing.T) {
 	out, err := os.CreateTemp(".", "csvtest-export-*.csv")
 	require.NoError(t, err)
 	require.NoError(t, out.Close())
-	t.Cleanup(func() { _ = os.Remove(out.Name()) })
 
+	t.Cleanup(func() { _ = os.Remove(out.Name()) }) //nolint:errcheck
+
+	//nolint:unqueryvet
 	res := makeResult(ctx, db, "test", "SELECT * FROM t\n-- csv:export="+out.Name(), Options{})
 	require.Empty(t, res.Error)
 

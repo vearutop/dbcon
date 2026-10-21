@@ -277,6 +277,29 @@ func ImportCSV(ctx context.Context, db *sql.DB, dialect sqluct.Dialect, file, ta
 	return count, nil
 }
 
+// tableColumns reports whether quotedTable exists and, if so, its columns.
+func tableColumns(ctx context.Context, db *sql.DB, quotedTable string) ([]string, bool) {
+	rows, err := db.QueryContext(ctx, "SELECT * FROM "+quotedTable+" LIMIT 0") //nolint:unqueryvet // probing for all columns of an unknown table is the point
+	if err != nil {
+		return nil, false
+	}
+
+	defer func() {
+		_ = rows.Close() //nolint:errcheck
+	}()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, false
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, false
+	}
+
+	return cols, true
+}
+
 // tryCSVImport executes a `-- csv:import=` directive statement, if the statement is one.
 //
 // If the target table already exists, and the directive did not explicitly ask to reuse it
@@ -321,10 +344,7 @@ func tryCSVImport(ctx context.Context, db *sql.DB, dialect sqluct.Dialect, insta
 
 	createTable := true
 
-	if rows, err := db.QueryContext(ctx, "SELECT * FROM "+quote(d.table)+" LIMIT 0"); err == nil {
-		tableCols, _ := rows.Columns()
-		_ = rows.Close() //nolint:errcheck
-
+	if tableCols, exists := tableColumns(ctx, db, quote(d.table)); exists {
 		createTable = false
 
 		leverageExisting := d.append || !d.header || len(d.cols) > 0

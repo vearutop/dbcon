@@ -1,3 +1,4 @@
+//nolint:testpackage // needs access to unexported CSV directive parsing helpers
 package dbcon
 
 import (
@@ -59,18 +60,22 @@ func TestTryCSVImport(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
 
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() { _ = db.Close() }) //nolint:errcheck
 
 	f1, err := os.CreateTemp(".", "csvtest-a-*.csv")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.Remove(f1.Name()) })
+
+	t.Cleanup(func() { _ = os.Remove(f1.Name()) }) //nolint:errcheck
+
 	_, err = f1.WriteString("a,b\n1,x\n2,y\n")
 	require.NoError(t, err)
 	require.NoError(t, f1.Close())
 
 	f2, err := os.CreateTemp(".", "csvtest-b-*.csv")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.Remove(f2.Name()) })
+
+	t.Cleanup(func() { _ = os.Remove(f2.Name()) }) //nolint:errcheck
+
 	_, err = f2.WriteString("a,b\n3,z\n4,w\n")
 	require.NoError(t, err)
 	require.NoError(t, f2.Close())
@@ -81,15 +86,7 @@ func TestTryCSVImport(t *testing.T) {
 	require.True(t, ok)
 	require.Empty(t, res.Error)
 	assert.Equal(t, [][]any{{"imported 4 rows from 2 files into t"}}, res.Values)
-
-	rows, err := db.QueryContext(ctx, "SELECT count(*) FROM t")
-	require.NoError(t, err)
-
-	var n int
-	require.True(t, rows.Next())
-	require.NoError(t, rows.Scan(&n))
-	require.NoError(t, rows.Close())
-	assert.Equal(t, 4, n)
+	assert.Equal(t, 4, countRows(ctx, t, db))
 
 	// Re-running the same import is a no-op by default.
 	res, ok = tryCSVImport(ctx, db, sqluct.DialectSQLite3, "test", "-- csv:import="+pattern+" into=t")
@@ -100,12 +97,24 @@ func TestTryCSVImport(t *testing.T) {
 	res, ok = tryCSVImport(ctx, db, sqluct.DialectSQLite3, "test", "-- csv:import="+f1.Name()+" into=t append=true")
 	require.True(t, ok)
 	require.Empty(t, res.Error)
+	assert.Equal(t, 6, countRows(ctx, t, db))
+}
 
-	rows, err = db.QueryContext(ctx, "SELECT count(*) FROM t")
+func countRows(ctx context.Context, t *testing.T, db *sql.DB) int {
+	t.Helper()
+
+	rows, err := db.QueryContext(ctx, "SELECT count(*) FROM t")
 	require.NoError(t, err)
+
+	defer func() {
+		require.NoError(t, rows.Close())
+	}()
+
+	var n int
 
 	require.True(t, rows.Next())
 	require.NoError(t, rows.Scan(&n))
-	require.NoError(t, rows.Close())
-	assert.Equal(t, 6, n)
+	require.NoError(t, rows.Err())
+
+	return n
 }

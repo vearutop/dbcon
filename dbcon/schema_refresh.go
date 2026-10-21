@@ -87,9 +87,9 @@ func RefreshSchema(deps Deps, options ...func(*Options)) usecase.Interactor {
 
 			switch v.Dialect { //nolint:exhaustive
 			case sqluct.DialectSQLite3:
-				cmp, promptBase = SqliteCompletions(v.Instance, options...)
+				cmp, promptBase = SqliteCompletions(v.Instance, options...) //nolint:contextcheck // no context parameter available
 			case sqluct.DialectPostgres:
-				cmp, promptBase = PostgresCompletions(v.Instance, options...)
+				cmp, promptBase = PostgresCompletions(v.Instance, options...) //nolint:contextcheck // no context parameter available
 			}
 
 			instances[i].Completions = cmp
