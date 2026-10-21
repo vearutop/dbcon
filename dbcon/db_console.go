@@ -22,6 +22,7 @@ import (
 	"github.com/vearutop/dbcon/internal/llm/gemini"
 	"github.com/vearutop/dbcon/internal/llm/ollama"
 	"github.com/vearutop/dbcon/internal/llm/openai"
+	"github.com/vearutop/plot-go"
 )
 
 // Options defines DBCon customizable params.
@@ -195,12 +196,11 @@ func DBConsole(deps Deps, prefix string, options ...func(*Options)) usecase.Inte
 <script src="` + prefix + `ace/ext-language_tools.min.js"></script>
 
 <link rel="icon" href="` + prefix + `favicon.png" type="image/png"/>
-<script src="` + prefix + `uPlot.iife.min.js"></script>
+` + string(plot.HeadTags(plotPrefix(prefix))) + `
 <script src="` + prefix + `uFuzzy.iife.js"></script>
 <script src="` + prefix + `script.js"></script>
 <script src="` + prefix + `script_extra.js"></script>
 <link rel="stylesheet" href="` + prefix + `style.css">
-<link rel="stylesheet" href="` + prefix + `uPlot.min.css">
 
 <script>
 completions = ` + string(j) + `
