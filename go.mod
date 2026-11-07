@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/andybalholm/brotli v1.2.0
-	github.com/bool64/dev v0.2.45
+	github.com/bool64/dev v0.2.46
 	github.com/bool64/sqluct v0.2.8
 	github.com/duckdb/duckdb-go/v2 v2.5.3
 	github.com/go-sql-driver/mysql v1.9.3
