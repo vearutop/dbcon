@@ -159,7 +159,7 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 
 			f := flatjsonl.Flags{}
 			f.SQLite = tempName
-			f.SQLTable = strings.TrimSuffix(strings.TrimSuffix(path.Base(dsn), ".jsonl"), ".log")
+			f.SQLTable = strings.TrimSuffix(strings.TrimSuffix(path.Base(fn), ".jsonl"), ".log")
 			f.ProgressInterval = 5 * time.Second
 			f.ChildrenLimitObject = 100
 			f.SQLMaxCols = 2000

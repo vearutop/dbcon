@@ -43,6 +43,7 @@ type Result struct {
 	Elapsed   string          `json:"elapsed"`
 	Error     string          `json:"error,omitempty"`
 	Instance  string          `json:"instance"`
+	Histogram *Histogram      `json:"histogram,omitempty"`
 }
 
 // Response is an envelope for Result items and extra shared information.
@@ -113,7 +114,12 @@ func queryInstance(ctx context.Context, deps Deps, query dbQuery, results []Resu
 		return results
 	}
 
-	for _, statement := range SplitStatements(query.Statement) {
+	script, err := expandTemplateVariables(query.Statement)
+	if err != nil {
+		return append(results, Result{Instance: string(query.Instance), Statement: query.Statement, Error: err.Error()})
+	}
+
+	for _, statement := range SplitStatements(script) {
 		if result, ok := tryCSVImport(ctx, inst.Instance, inst.Dialect, string(query.Instance), statement); ok {
 			results = append(results, result)
 
@@ -145,6 +151,16 @@ func makeResult(ctx context.Context, db *sql.DB, instance, statement string, o O
 
 	result.Elapsed = time.Since(start).String()
 
+	defer func() {
+		if err := rows.Err(); err != nil {
+			result.Error += fmt.Sprint(" rows error:", err.Error())
+		}
+
+		if err := rows.Close(); err != nil {
+			result.Error += fmt.Sprint(" rows close:", err.Error())
+		}
+	}()
+
 	cols, err := rows.Columns()
 	if err != nil {
 		result.Error = err.Error()
@@ -159,15 +175,24 @@ func makeResult(ctx context.Context, db *sql.DB, instance, statement string, o O
 		return result
 	}
 
-	defer func() {
-		if err := rows.Err(); err != nil {
-			result.Error += fmt.Sprint(" rows error:", err.Error())
+	histogram, err := newHistogram(statement, cols)
+	if err != nil {
+		result.Error = err.Error()
+
+		return result
+	}
+
+	if histogram != nil {
+		histogram.collect(rows, cols, colProcessor, &result)
+
+		if file, ok := parseCSVExport(statement); ok && result.Error == "" && rows.Err() == nil {
+			if err := exportHistogram(&result, file); err != nil {
+				result.Error = err.Error()
+			}
 		}
 
-		if err := rows.Close(); err != nil {
-			result.Error += fmt.Sprint(" rows close:", err.Error())
-		}
-	}()
+		return result
+	}
 
 	// A `-- csv:export=` statement streams rows straight to a file instead of buffering them
 	// into the result, so a selection too large to hold in memory (or to ship back as JSON)
@@ -209,27 +234,11 @@ func makeResult(ctx context.Context, db *sql.DB, instance, statement string, o O
 	rowCount := 0
 
 	for rows.Next() {
-		values := make([]any, len(cols))
-		valuePointers := make([]any, len(cols))
-
-		for i := range values {
-			valuePointers[i] = &values[i]
-		}
-
-		if err := rows.Scan(valuePointers...); err != nil {
+		values, err := scanProcessedRow(rows, cols, colProcessor)
+		if err != nil {
 			result.Error = "scan rows: " + err.Error()
 
 			return result
-		}
-
-		for i, p := range colProcessor {
-			v := values[i]
-
-			for _, fn := range p {
-				v = fn(v)
-			}
-
-			values[i] = v
 		}
 
 		for i, v := range values {
@@ -284,6 +293,27 @@ func makeResult(ctx context.Context, db *sql.DB, instance, statement string, o O
 	}
 
 	return result
+}
+
+func scanProcessedRow(rows *sql.Rows, cols []string, processors map[int][]func(any) any) ([]any, error) {
+	values := make([]any, len(cols))
+	pointers := make([]any, len(cols))
+
+	for i := range values {
+		pointers[i] = &values[i]
+	}
+
+	if err := rows.Scan(pointers...); err != nil {
+		return nil, err
+	}
+
+	for i, functions := range processors {
+		for _, fn := range functions {
+			values[i] = fn(values[i])
+		}
+	}
+
+	return values, nil
 }
 
 func makeColProcessor(statement string, cols []string, o Options) (map[int][]func(any) any, error) {
