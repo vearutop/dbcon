@@ -10,6 +10,17 @@ import (
 // staticCompletions returns the directive/value-processor completions available regardless of schema.
 func staticCompletions(o Options) []SQLCompletion {
 	cmp := []SQLCompletion{ //nolint:prealloc
+		{Value: "-- histogram", Score: 1000, Meta: "collect weighted (count, value) rows into histogram buckets"},
+		{Value: "-- histogram:buckets=20", Score: 1000, Meta: "maximum number of adaptive histogram buckets"},
+		{Value: "-- histogram:buckets=20 collect_buckets=200", Score: 1000, Meta: "collect finer buckets, then merge to the output limit"},
+		{Value: "-- histogram:count=cnt value=l buckets=20", Score: 1000, Meta: "select histogram columns by name"},
+		{Value: "-- histogram:percent", Score: 1000, Meta: "show percentages on histogram Y axis"},
+		{Value: "-- histogram:percentiles=50,90,95,99", Score: 1000, Meta: "show percentile estimates from collection buckets before squashing"},
+		{Value: "-- set:$tableName=my_table", Score: 1000, Meta: "set template variable for following SQL"},
+		{Value: "-- for:$column in col_a, col_b", Score: 1000, Meta: "repeat statements for each expression"},
+		{Value: "-- for:$column in", Score: 1000, Meta: "repeat with one -- item:expression per line"},
+		{Value: "-- item:column_name", Score: 1000, Meta: "add an expression at the start of a for block"},
+		{Value: "-- endfor", Score: 1000, Meta: "end repeated statements"},
 		{Value: "-- plot:cols", Score: 1000, Meta: "exp cols: x, y1, y2, ..."},
 		{Value: "-- plot:rows", Score: 1000, Meta: "exp cols: x, y, label"},
 		{Value: "-- plot:time", Score: 1000, Meta: "time series"},

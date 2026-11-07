@@ -74,6 +74,57 @@ dbcon [OPTIONS] DB...
 
 Multiple statements can be separated with `;`.
 
+Define template variables with a standalone `-- set:$name=value` comment:
+
+```sql
+-- set:$tableName=be_enriched
+select count(DISTINCT `.context.click.CallbackData.Tracker`) from $tableName;
+
+-- plot:pie
+select count(1), `.datl.appName`
+from $tableName
+group by `.datl.appName`;
+```
+
+Names are case-sensitive and use letters, digits, and underscores (starting with a letter or underscore).
+Setters apply from their position onward within the same query script; setting a name again changes its value for subsequent text.
+Values are trimmed and inserted as raw text, including inside SQL quotes and other comment directives; include any SQL quoting in the value as needed.
+Values may reference previously set variables. Unknown variables remain unchanged, and replacements are not recursively expanded.
+Setter comments do not produce query results and do not need a semicolon.
+
+Repeat a block of statements with `-- for:$name in ...` and `-- endfor`:
+
+```sql
+-- set:$clicksTable=good_enr
+-- for:$column in `.datl.appName`, `.datl.id`, concat(`.datl.browserName`, `.datl.browserVersion`)
+-- plot:pie
+-- plot:caption=$column
+select count(1), $column from $clicksTable group by $column;
+select count(DISTINCT $column) from $clicksTable;
+-- endfor
+```
+
+For longer lists, put each expression on its own `-- item:` line immediately after the loop header:
+
+```sql
+-- for:$column in
+-- item:`.datl.appName`
+-- item:`.datl.id`
+-- item:`.datl.browserName`
+-- item:concat(`.datl.browserName`, `.datl.browserVersion`)
+
+-- plot:pie
+select count(1), $column from $clicksTable group by $column;
+-- endfor
+```
+
+Inline lists split on commas outside quotes, comments, and parentheses. Each `-- item:` line supplies one complete expression.
+All statements in the block run for the first item, then for the next, producing separate results and charts.
+Terminate SQL statements with semicolons as usual. Loop directives must be standalone comments.
+Loops can nest. The loop variable is restored to its previous value after the block; other setters retain their usual effect on following text.
+Item values may reference existing variables and are expanded when entering the loop.
+Malformed loops report a template error with a line number before any SQL in that query script executes.
+
 If a statement has `-- plot` in comment, result is plotted on a chart.
 
 First column is used for X axis, remaining columns go to Y axis.
@@ -93,6 +144,49 @@ If a statement has `-- plot:pie` in comment, result is rendered as a pie chart.
 First column is used for the numeric value of pie slice, second is a label.
 
 Pie total is calculated as sum of all values, for cases of partial pie you can provide the total with `-- plot:pie:total=123`.
+
+## Histograms
+
+`-- histogram` combines numeric values into adaptive buckets using [dynhist-go](https://github.com/vearutop/dynhist-go).
+Each input row is `(count, value)`: the value contributes `count` observations. For example, collect URL lengths:
+
+```sql
+-- histogram:buckets=20
+-- plot:stacked_bars
+SELECT count(1) cnt, length(url) l FROM log GROUP BY l;
+```
+
+The equivalent raw input is `SELECT 1, length(url) l FROM log;` with the same directives.
+Use your database's string-length function (`length`, `strlen`, etc.).
+Row order and aggregation can affect adaptive bucket boundaries, while weighted totals remain the same.
+
+Without a plot directive, results are a table of `min`, `max`, `count`, and `percent`.
+With `-- plot:stacked_bars`, each bar represents a bucket; labels show its observed range and tooltips show its count and percentage of all collected observations.
+Bars are equally spaced categories, even when numeric ranges have different widths.
+`-- plot:caption=...` and `-- plot:height=...` also apply.
+
+Options can be combined on one directive or supplied on separate histogram directive lines:
+
+* `-- histogram:buckets=20`: maximum number of output buckets (default 20, allowed 1–10000).
+* `-- histogram:buckets=20 collect_buckets=200`: retain up to 200 buckets while scanning, then merge adjacent buckets down to at most 20 for display and CSV export. This keeps finer detail during collection with bounded memory. `collect_buckets` defaults to 200 (or `buckets` if higher), must be at least `buckets`, and supports the same 1–10000 range. Final merging uses the same smallest combined range strategy as collection and preserves counts and sums.
+* `-- histogram:count=cnt value=l`: select columns by exact alias, overriding the default first and second columns.
+* `-- histogram:percent`: display percentages instead of counts on the chart's Y axis.
+* `-- histogram:percentiles=50,90,95,99`: show percentile estimates above the chart or table. Values must be greater than 0 and at most 100; fractional percentiles such as `99.9` are supported. Estimates use dynhist's `Percentile` API on the weighted collection buckets **before squashing**, and use the same units as the value column. Hover an estimate to see its collection bucket range. Empty distributions have no percentile estimates.
+
+For example, show response-time percentiles alongside the distribution:
+
+```sql
+-- histogram:percentiles=50,90,95,99
+-- plot:stacked_bars
+SELECT 1, response_time_ms FROM log;
+```
+
+Percentile summaries also appear in portable HTML reports. CSV exports continue to contain only the histogram bucket rows.
+
+Counts must be nonnegative integers. Numeric strings are accepted; nonnumeric and nonfinite values report an error.
+Zero-weight rows and NULL values are skipped. Percentages use the total weight of the remaining observations.
+Collection streams rows and retains only the buckets, without expanding weighted rows into individual observations.
+Histogram directives work inside template loops. CSV downloads and `-- csv:export=...` export the histogram buckets.
 
 ## CSV Import/Export
 
