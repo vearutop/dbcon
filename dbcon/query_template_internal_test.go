@@ -70,10 +70,12 @@ SELECT count(1) FROM $tableName;
 -- set:$unused=ignored`}
 	results := queryInstance(ctx, deps, query, nil, Options{})
 	require.Len(t, results, 3)
+
 	for _, result := range results {
 		require.Empty(t, result.Error)
 		assert.NotContains(t, result.Statement, "$tableName")
 	}
+
 	assert.Equal(t, [][]any{{"2"}}, results[0].Values)
 	assert.Equal(t, [][]any{{"2", "app1"}, {"1", "app2"}}, results[1].Values)
 	assert.Contains(t, results[1].Statement, "-- plot:pie")
@@ -175,6 +177,7 @@ func TestQueryInstance_TemplateLoops(t *testing.T) {
 
 	_, err = db.ExecContext(ctx, "CREATE TABLE clicks (app TEXT, browser TEXT); INSERT INTO clicks VALUES ('a', 'x'), ('a', 'y'), ('b', 'x')")
 	require.NoError(t, err)
+
 	deps := dependencies{instances: []DBInstance{{Name: "test", Instance: db}}}
 
 	results := queryInstance(ctx, deps, dbQuery{Instance: "test", Statement: `-- set:$table=clicks
@@ -187,10 +190,12 @@ SELECT count(1), $column FROM $table GROUP BY $column ORDER BY $column;
 SELECT count(DISTINCT $column) FROM $table;
 -- endfor`}, nil, Options{})
 	require.Len(t, results, 4)
+
 	for _, result := range results {
 		require.Empty(t, result.Error)
 		assert.NotContains(t, result.Statement, "$column")
 	}
+
 	assert.Equal(t, [][]any{{"2", "a"}, {"1", "b"}}, results[0].Values)
 	assert.Contains(t, results[0].Statement, "-- plot:caption=app")
 	assert.Equal(t, [][]any{{"2"}}, results[1].Values)

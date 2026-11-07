@@ -54,6 +54,7 @@ func expandTemplateNodes(out *strings.Builder, nodes []*templateNode, vars map[s
 		case node.values != nil:
 			previous, existed := vars[node.name]
 			values := make([]string, len(node.values))
+
 			for i, value := range node.values {
 				values[i] = replaceTemplateVariables(value, vars)
 			}
@@ -84,6 +85,7 @@ func parseQueryTemplate(script string) (*templateNode, error) {
 	for i := 0; i < len(script); {
 		start := i
 		i = templateSQLChunkEnd(script, i)
+
 		if !strings.HasPrefix(script[start:], "--") {
 			continue
 		}
@@ -95,6 +97,7 @@ func parseQueryTemplate(script string) (*templateNode, error) {
 
 		comment := strings.TrimSpace(script[start:i])
 		setter := templateSetter.FindStringSubmatch(comment)
+
 		if setter == nil && !templateLoopDirective.MatchString(comment) {
 			continue
 		}
@@ -110,12 +113,14 @@ func parseQueryTemplate(script string) (*templateNode, error) {
 		case templateFor.MatchString(comment):
 			m := templateFor.FindStringSubmatch(comment)
 			values := []string{}
+
 			if strings.TrimSpace(m[2]) != "" {
-				var err error
-				values, err = splitTemplateItems(m[2])
+				items, err := splitTemplateItems(m[2])
 				if err != nil {
 					return nil, fmt.Errorf("template line %d: %w", line, err)
 				}
+
+				values = items
 			}
 
 			loop := &templateNode{name: m[1], values: values, line: line}
@@ -136,6 +141,7 @@ func parseQueryTemplate(script string) (*templateNode, error) {
 			if len(stack) == 1 {
 				return nil, fmt.Errorf("template line %d: endfor without for", line)
 			}
+
 			if len(parent.values) == 0 {
 				return nil, fmt.Errorf("template line %d: for requires at least one item", parent.line)
 			}
@@ -170,6 +176,7 @@ func splitTemplateItems(list string) ([]string, error) {
 	var items []string
 
 	depth, start := 0, 0
+
 	for i := 0; i < len(list); {
 		c := list[i]
 		if strings.ContainsRune("'\"`", rune(c)) {
@@ -182,6 +189,7 @@ func splitTemplateItems(list string) ([]string, error) {
 
 			continue
 		}
+
 		if strings.HasPrefix(list[i:], "--") || strings.HasPrefix(list[i:], "/*") {
 			end := templateSQLChunkEnd(list, i)
 			if strings.HasPrefix(list[i:], "/*") && !strings.HasSuffix(list[i:end], "*/") {

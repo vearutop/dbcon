@@ -19,11 +19,17 @@ func TestHistogramWeightedCollection(t *testing.T) {
 		t.Run(strconv.Itoa(limit), func(t *testing.T) {
 			h, err := newHistogram("-- histogram:buckets="+strconv.Itoa(limit)+" collect_buckets="+strconv.Itoa(limit), []string{"count", "value"})
 			require.NoError(t, err)
+
 			plain := dynhist.Collector{BucketsLimit: limit}
-			for _, row := range [][]any{{4, 12}, {2, 36}, {7, 18}, {3, -5}, {5, 100}, {2, 13}, {3, 19}} {
-				require.NoError(t, h.add(row))
-				for i := 0; i < row[0].(int); i++ {
-					plain.Add(float64(row[1].(int)))
+
+			for _, row := range []struct {
+				weight int
+				value  float64
+			}{{4, 12}, {2, 36}, {7, 18}, {3, -5}, {5, 100}, {2, 13}, {3, 19}} {
+				require.NoError(t, h.add([]any{row.weight, row.value}))
+
+				for i := 0; i < row.weight; i++ {
+					plain.Add(row.value)
 				}
 			}
 
@@ -46,10 +52,12 @@ func TestHistogramLargeWeightAndValidation(t *testing.T) {
 	for _, row := range [][]any{{-1, 1}, {0.5, 1}, {nil, 1}, {"NaN", 1}, {1, "NaN"}, {1, math.Inf(1)}, {1, "abc"}} {
 		require.Error(t, h.add(row))
 	}
+
 	assert.Equal(t, 1_000_000_000, h.collector.Count)
 
 	h, err = newHistogram("-- histogram", []string{"count", "value"})
 	require.NoError(t, err)
+
 	maxCount := int(^uint(0) >> 1)
 	require.NoError(t, h.add([]any{strconv.Itoa(maxCount), 1}))
 	require.ErrorContains(t, h.add([]any{1, 2}), "overflows")
@@ -134,11 +142,13 @@ func TestHistogramPercentiles(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() }) //nolint:errcheck
 
 	const query = "WITH data(cnt, value) AS (VALUES (990, 10), (9, 20), (1, 100)) SELECT cnt, value FROM data"
+
 	const directive = "-- histogram:buckets=1 collect_buckets=200 percentiles=50,90,95,99,99.9,100\n"
 
 	// Match the library's native estimates, using weights without expanding rows.
 	h, err := newHistogram(directive, []string{"cnt", "value"})
 	require.NoError(t, err)
+
 	for _, row := range [][]any{{990, 10}, {9, 20}, {1, 100}} {
 		require.NoError(t, h.add(row))
 	}
@@ -148,6 +158,7 @@ func TestHistogramPercentiles(t *testing.T) {
 	require.NotNil(t, result.Histogram)
 	assert.Equal(t, [][]any{{float64(10), float64(100), "1000", float64(100)}}, result.Values)
 	require.Len(t, result.Histogram.Percentiles, len(h.percentiles))
+
 	for i, percent := range h.percentiles {
 		estimate := result.Histogram.Percentiles[i]
 		assert.Equal(t, percent, estimate.Percent)
@@ -166,6 +177,7 @@ func TestHistogramPercentiles(t *testing.T) {
 	assert.Equal(t, result.Histogram, plotted.Histogram)
 	data, err := json.Marshal(result)
 	require.NoError(t, err)
+
 	var decoded Result
 
 	require.NoError(t, json.Unmarshal(data, &decoded))
@@ -196,9 +208,11 @@ func TestHistogramPercentileOptions(t *testing.T) {
 func TestHistogramSquash(t *testing.T) {
 	h, err := newHistogram("-- histogram:buckets=2 collect_buckets=8", []string{"cnt", "value"})
 	require.NoError(t, err)
+
 	for i := range 8 {
 		require.NoError(t, h.add([]any{i + 1, i}))
 	}
+
 	require.Len(t, h.collector.Buckets, 8)
 	total := h.collector.Bucket
 	h.squash()
@@ -215,10 +229,12 @@ func TestHistogramSquash(t *testing.T) {
 	// Collection remains bounded even when there are more distinct values.
 	h, err = newHistogram("-- histogram:buckets=2 collect_buckets=8", []string{"cnt", "value"})
 	require.NoError(t, err)
+
 	for i := range 100 {
 		require.NoError(t, h.add([]any{1, i}))
 		require.LessOrEqual(t, len(h.collector.Buckets), 8)
 	}
+
 	h.squash()
 	require.Len(t, h.collector.Buckets, 2)
 	assert.Equal(t, 100, h.collector.Buckets[0].Count+h.collector.Buckets[1].Count)
@@ -232,6 +248,7 @@ func TestMakeResult_Histogram(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() }) //nolint:errcheck
+
 	ctx := context.Background()
 	_, err = db.ExecContext(ctx, "CREATE TABLE log (url TEXT); INSERT INTO log VALUES ('abcd'), ('abcd'), ('abcdef'), (NULL)")
 	require.NoError(t, err)
@@ -267,7 +284,12 @@ func TestMakeResult_Histogram(t *testing.T) {
 	}
 
 	processed := makeResult(ctx, db, "test", "-- histogram\n-- double:l\nSELECT 2 cnt, 3 l", Options{
-		valueProcessor: map[string]func(any) any{"double": func(v any) any { return v.(int64) * 2 }},
+		valueProcessor: map[string]func(any) any{"double": func(v any) any {
+			n, ok := v.(int64)
+			require.True(t, ok)
+
+			return n * 2
+		}},
 	})
 	require.Empty(t, processed.Error)
 	assert.Equal(t, [][]any{{float64(6), float64(6), "2", float64(100)}}, processed.Values)
@@ -276,10 +298,12 @@ func TestMakeResult_Histogram(t *testing.T) {
 	deps := dependencies{instances: []DBInstance{{Name: "test", Instance: db}}}
 	results := queryInstance(ctx, deps, dbQuery{Instance: "test", Statement: "-- for:$col in length(url), length(url) * 2\n-- histogram\n-- plot:stacked_bars\nSELECT 1, $col FROM log;\n-- endfor"}, nil, Options{})
 	require.Len(t, results, 2)
+
 	for _, result := range results {
 		require.Empty(t, result.Error)
 		require.NotNil(t, result.Histogram)
 	}
+
 	assert.Equal(t, float64(8), results[1].Values[0][0])
 
 	squashed := makeResult(ctx, db, "test", "-- histogram:buckets=1 collect_buckets=200\nSELECT count(1), length(url) FROM log GROUP BY length(url)", Options{})
@@ -291,6 +315,7 @@ func TestHistogramCSVExport(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() }) //nolint:errcheck
+
 	f, err := os.CreateTemp(".", "histogram-test-*.csv")
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
@@ -300,12 +325,14 @@ func TestHistogramCSVExport(t *testing.T) {
 	require.Empty(t, result.Error)
 	assert.Nil(t, result.Histogram)
 	assert.Equal(t, []string{"csv_export"}, result.Columns)
+
 	data, err := os.ReadFile(f.Name())
 	require.NoError(t, err)
 	assert.Equal(t, "min,max,count,percent\n24,24,10,100\n", string(data))
 
 	result = makeResult(context.Background(), db, "test", "-- histogram:buckets=1 collect_buckets=3\n-- csv:export="+f.Name()+"\nSELECT 2, 12 UNION ALL SELECT 3, 36", Options{})
 	require.Empty(t, result.Error)
+
 	data, err = os.ReadFile(f.Name())
 	require.NoError(t, err)
 	assert.Equal(t, "min,max,count,percent\n12,36,5,100\n", string(data))

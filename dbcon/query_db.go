@@ -150,6 +150,7 @@ func makeResult(ctx context.Context, db *sql.DB, instance, statement string, o O
 	}
 
 	result.Elapsed = time.Since(start).String()
+
 	defer func() {
 		if err := rows.Err(); err != nil {
 			result.Error += fmt.Sprint(" rows error:", err.Error())
@@ -180,8 +181,10 @@ func makeResult(ctx context.Context, db *sql.DB, instance, statement string, o O
 
 		return result
 	}
+
 	if histogram != nil {
 		histogram.collect(rows, cols, colProcessor, &result)
+
 		if file, ok := parseCSVExport(statement); ok && result.Error == "" && rows.Err() == nil {
 			if err := exportHistogram(&result, file); err != nil {
 				result.Error = err.Error()

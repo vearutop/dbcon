@@ -169,5 +169,5 @@ func (s *Switch) Shutdown() {
 
 // Wait blocks until shutdown.
 func (s *Switch) Wait() {
-	<-s.done
+	<-s.done //nolint:errcheck // Wait only waits for shutdown; Done handles shutdown errors.
 }

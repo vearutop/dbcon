@@ -12,6 +12,8 @@ import (
 	dynhist "github.com/vearutop/dynhist-go"
 )
 
+const histogramPercent = "percent"
+
 // Histogram describes the presentation of weighted histogram result rows.
 // Rows contain minimum, maximum, count and percentage, in that order.
 type Histogram struct {
@@ -46,6 +48,7 @@ func newHistogram(statement string, cols []string) (*histogramCollector, error) 
 	for i := 0; i < len(statement); {
 		start := i
 		i = templateSQLChunkEnd(statement, i)
+
 		if !strings.HasPrefix(statement[start:], "--") {
 			continue
 		}
@@ -62,6 +65,7 @@ func newHistogram(statement string, cols []string) (*histogramCollector, error) 
 
 		found = true
 		params := strings.TrimPrefix(strings.TrimPrefix(comment, "histogram"), ":")
+
 		for _, param := range strings.Fields(params) {
 			key, value, _ := strings.Cut(param, "=")
 			switch key {
@@ -88,14 +92,15 @@ func newHistogram(statement string, cols []string) (*histogramCollector, error) 
 				}
 
 				valueName = value
-			case "percent":
-				if param != "percent" {
+			case histogramPercent:
+				if param != histogramPercent {
 					return nil, fmt.Errorf("histogram: use percent without a value")
 				}
 
 				h.info.Percent = true
 			case "percentiles":
 				h.percentiles = nil
+
 				for _, item := range strings.Split(value, ",") {
 					p, err := strconv.ParseFloat(item, 64)
 					if err != nil || math.IsNaN(p) || math.IsInf(p, 0) || p <= 0 || p > 100 {
@@ -113,9 +118,11 @@ func newHistogram(statement string, cols []string) (*histogramCollector, error) 
 	if !found {
 		return nil, nil //nolint:nilnil
 	}
+
 	if collectionBuckets == 0 {
 		collectionBuckets = max(200, h.resultBuckets)
 	}
+
 	if collectionBuckets < h.resultBuckets {
 		return nil, fmt.Errorf("histogram: collect_buckets must be at least buckets")
 	}
@@ -135,6 +142,7 @@ func newHistogram(statement string, cols []string) (*histogramCollector, error) 
 		}
 
 		index := -1
+
 		for i, name := range cols {
 			if name == selection.name {
 				if index != -1 {
@@ -144,12 +152,14 @@ func newHistogram(statement string, cols []string) (*histogramCollector, error) 
 				index = i
 			}
 		}
+
 		if index == -1 {
 			return nil, fmt.Errorf("histogram: unknown column %q", selection.name)
 		}
 
 		*selection.index = index
 	}
+
 	if h.countCol == h.valueCol {
 		return nil, fmt.Errorf("histogram: count and value must be different columns")
 	}
@@ -195,6 +205,7 @@ func (h *histogramCollector) add(row []any) error {
 	if err != nil {
 		return err
 	}
+
 	if weight == 0 || row[h.valueCol] == nil {
 		return nil
 	}
@@ -203,6 +214,7 @@ func (h *histogramCollector) add(row []any) error {
 	if err != nil {
 		return err
 	}
+
 	if weight > int(^uint(0)>>1)-h.collector.Count {
 		return fmt.Errorf("total histogram count overflows an integer")
 	}
@@ -211,6 +223,7 @@ func (h *histogramCollector) add(row []any) error {
 	// on boundaries, so adjusting the resulting bucket is equivalent to adding
 	// the same value weight times. This collector is local to one query.
 	h.collector.Add(value)
+
 	extra := weight - 1
 	h.collector.Count += extra
 	h.collector.Sum += float64(extra) * value
@@ -233,15 +246,18 @@ func (h *histogramCollector) collect(rows *sql.Rows, cols []string, processors m
 	for rows.Next() {
 		rowNumber++
 		values, err := scanProcessedRow(rows, cols, processors)
+
 		if err == nil {
 			err = h.add(values)
 		}
+
 		if err != nil {
 			result.Error = fmt.Sprintf("histogram row %d: %s", rowNumber, err)
 
 			return
 		}
 	}
+
 	if rows.Err() != nil {
 		return // makeResult reports the rows error in its deferred cleanup.
 	}
@@ -264,8 +280,9 @@ func (h *histogramCollector) collect(rows *sql.Rows, cols []string, processors m
 	h.squash()
 
 	result.Histogram = &h.info
-	result.Columns = []string{"min", "max", "count", "percent"}
+	result.Columns = []string{"min", "max", "count", histogramPercent}
 	result.Values = make([][]any, 0, len(h.collector.Buckets))
+
 	for _, b := range h.collector.Buckets {
 		percent := float64(b.Count) / float64(h.collector.Count) * 100
 		result.Values = append(result.Values, []any{b.Min, b.Max, strconv.Itoa(b.Count), percent})
@@ -280,6 +297,7 @@ func (h *histogramCollector) squash() {
 	for len(buckets) > h.resultBuckets {
 		merge := 1
 		minWidth := dynhist.AvgWidth(buckets[0], buckets[1], h.collector.Bucket)
+
 		for i := 2; i < len(buckets); i++ {
 			width := dynhist.AvgWidth(buckets[i-1], buckets[i], h.collector.Bucket)
 			if width < minWidth {
@@ -311,9 +329,11 @@ func exportHistogram(result *Result, file string) error {
 
 	writeErr := writeCSVRows(csv.NewWriter(f), result.Columns, result.Values)
 	closeErr := f.Close()
+
 	if writeErr != nil {
 		return writeErr
 	}
+
 	if closeErr != nil {
 		return closeErr
 	}
