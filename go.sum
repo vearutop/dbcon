@@ -137,6 +137,8 @@ github.com/swaggest/usecase v1.3.1 h1:JdKV30MTSsDxAXxkldLNcEn8O2uf565khyo6gr5sS+
 github.com/swaggest/usecase v1.3.1/go.mod h1:cae3lDd5VDmM36OQcOOOdAlEDg40TiQYIp99S9ejWqA=
 github.com/vearutop/dynhist-go v1.2.4 h1:EVGgvW9+F7fQb4ZyyZV8znqo4JiWx6FyvVFmGrfZKzM=
 github.com/vearutop/dynhist-go v1.2.4/go.mod h1:pZcCNVJxPDn7+Q/UYVGOcyrYupnh9tWNmr5uKwyHYNg=
+github.com/vearutop/dynhist-go v1.3.0 h1:w8io2M5HC/eIhrJYsFtL1XHoiz8BsLhVg0Hj6M1Pgbc=
+github.com/vearutop/dynhist-go v1.3.0/go.mod h1:jxq1LW/iF91PMP6B0QsXhTiA2F6DAtmoKqWmaBDVi/M=
 github.com/vearutop/fastjson v1.0.0 h1:4yn7BZj9R52INMqMj1q90gG206Qm9XY54aKfj3ZPC54=
 github.com/vearutop/fastjson v1.0.0/go.mod h1:H1NX3WgvfAI1gJf9Pk3IKegysfqZOotwqiihA+txgMQ=
 github.com/vearutop/flatjsonl v0.9.8 h1:9NM94EWSiicL8rZLv9/YlHVTMAGgA6cS3m9jBQik1VE=

@@ -18,7 +18,7 @@ require (
 	github.com/swaggest/rest v0.2.75
 	github.com/swaggest/swgui v1.8.5
 	github.com/swaggest/usecase v1.3.1
-	github.com/vearutop/dynhist-go v1.2.4
+	github.com/vearutop/dynhist-go v1.3.0
 	github.com/vearutop/flatjsonl v0.9.8
 	github.com/vearutop/plot-go v0.1.0
 	github.com/vearutop/statigz v1.5.0

@@ -171,7 +171,7 @@ Options can be combined on one directive or supplied on separate histogram direc
 * `-- histogram:buckets=20 collect_buckets=200`: retain up to 200 buckets while scanning, then merge adjacent buckets down to at most 20 for display and CSV export. This keeps finer detail during collection with bounded memory. `collect_buckets` defaults to 200 (or `buckets` if higher), must be at least `buckets`, and supports the same 1–10000 range. Final merging uses the same smallest combined range strategy as collection and preserves counts and sums.
 * `-- histogram:count=cnt value=l`: select columns by exact alias, overriding the default first and second columns.
 * `-- histogram:percent`: display percentages instead of counts on the chart's Y axis.
-* `-- histogram:percentiles=50,90,95,99`: show percentile estimates above the chart or table. Values must be greater than 0 and at most 100; fractional percentiles such as `99.9` are supported. Estimates use dynhist's `Percentile` API on the weighted collection buckets **before squashing**, and use the same units as the value column. Hover an estimate to see its collection bucket range. Empty distributions have no percentile estimates.
+* `-- histogram:percentiles=50,90,95,99`: show percentile estimates above the chart or table. Values must be greater than 0 and at most 100; fractional percentiles such as `99.9` are supported. Estimates use dynhist's batch `Percentiles` API and nearest-rank selection on the weighted collection buckets **before squashing**, and use the same units as the value column. Hover an estimate to see its collection bucket range. Empty distributions have no percentile estimates.
 
 For example, show response-time percentiles alongside the distribution:
 

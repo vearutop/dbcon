@@ -189,7 +189,28 @@ func TestHistogramPercentiles(t *testing.T) {
 		require.NotNil(t, empty.Histogram)
 		assert.Empty(t, empty.Histogram.Percentiles)
 		assert.Empty(t, empty.Values)
+		_, err := json.Marshal(empty)
+		require.NoError(t, err) // Do not expose dynhist's empty-distribution NaN in JSON.
 	}
+}
+
+func TestHistogramPercentilesNearestRank(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() }) //nolint:errcheck
+
+	result := makeResult(context.Background(), db, "test",
+		"-- histogram:buckets=1 percentiles=99,50,99,99.9,100\nSELECT 1, 10 UNION ALL SELECT 1, 20", Options{})
+	require.Empty(t, result.Error)
+	require.NotNil(t, result.Histogram)
+	assert.Equal(t, []HistogramPercentile{
+		{Percent: 99, Value: 20, Min: 20, Max: 20},
+		{Percent: 50, Value: 10, Min: 10, Max: 10},
+		{Percent: 99, Value: 20, Min: 20, Max: 20},
+		{Percent: 99.9, Value: 20, Min: 20, Max: 20},
+		{Percent: 100, Value: 20, Min: 20, Max: 20},
+	}, result.Histogram.Percentiles)
+	assert.Equal(t, [][]any{{float64(10), float64(20), "2", float64(100)}}, result.Values)
 }
 
 func TestHistogramPercentileOptions(t *testing.T) {
@@ -215,14 +236,14 @@ func TestHistogramSquash(t *testing.T) {
 
 	require.Len(t, h.collector.Buckets, 8)
 	total := h.collector.Bucket
-	h.squash()
+	h.collector.Squash(h.resultBuckets)
 	assert.Equal(t, []dynhist.Bucket{
 		{Min: 0, Max: 3, Count: 10, Sum: 20},
 		{Min: 4, Max: 7, Count: 26, Sum: 148},
 	}, h.collector.Buckets)
 	assert.Equal(t, total, h.collector.Bucket)
 	// Repeated finalization must not change the buckets or totals.
-	h.squash()
+	h.collector.Squash(h.resultBuckets)
 	assert.Len(t, h.collector.Buckets, 2)
 	assert.Equal(t, total, h.collector.Bucket)
 
@@ -235,7 +256,7 @@ func TestHistogramSquash(t *testing.T) {
 		require.LessOrEqual(t, len(h.collector.Buckets), 8)
 	}
 
-	h.squash()
+	h.collector.Squash(h.resultBuckets)
 	require.Len(t, h.collector.Buckets, 2)
 	assert.Equal(t, 100, h.collector.Buckets[0].Count+h.collector.Buckets[1].Count)
 	assert.Equal(t, float64(4950), h.collector.Buckets[0].Sum+h.collector.Buckets[1].Sum)

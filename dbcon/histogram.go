@@ -219,24 +219,7 @@ func (h *histogramCollector) add(row []any) error {
 		return fmt.Errorf("total histogram count overflows an integer")
 	}
 
-	// Add inserts/merges once. The default AvgWidth merge strategy depends only
-	// on boundaries, so adjusting the resulting bucket is equivalent to adding
-	// the same value weight times. This collector is local to one query.
-	h.collector.Add(value)
-
-	extra := weight - 1
-	h.collector.Count += extra
-	h.collector.Sum += float64(extra) * value
-
-	for i := range h.collector.Buckets {
-		b := &h.collector.Buckets[i]
-		if value >= b.Min && value <= b.Max {
-			b.Count += extra
-			b.Sum += float64(extra) * value
-
-			break
-		}
-	}
+	h.collector.AddN(value, weight)
 
 	return nil
 }
@@ -262,13 +245,14 @@ func (h *histogramCollector) collect(rows *sql.Rows, cols []string, processors m
 		return // makeResult reports the rows error in its deferred cleanup.
 	}
 
-	if h.collector.Count > 0 {
-		for _, percent := range h.percentiles {
-			value := h.collector.Percentile(percent)
-			for _, bucket := range h.collector.Buckets {
+	collected := h.collector.Snapshot()
+	if collected.Count > 0 {
+		values := h.collector.Percentiles(h.percentiles...)
+		for i, value := range values {
+			for _, bucket := range collected.Buckets {
 				if bucket.Max == value {
 					h.info.Percentiles = append(h.info.Percentiles, HistogramPercentile{
-						Percent: percent, Value: value, Min: bucket.Min, Max: bucket.Max,
+						Percent: h.percentiles[i], Value: value, Min: bucket.Min, Max: bucket.Max,
 					})
 
 					break
@@ -277,43 +261,17 @@ func (h *histogramCollector) collect(rows *sql.Rows, cols []string, processors m
 		}
 	}
 
-	h.squash()
+	h.collector.Squash(h.resultBuckets)
+	output := h.collector.Snapshot()
 
 	result.Histogram = &h.info
 	result.Columns = []string{"min", "max", "count", histogramPercent}
-	result.Values = make([][]any, 0, len(h.collector.Buckets))
+	result.Values = make([][]any, 0, len(output.Buckets))
 
-	for _, b := range h.collector.Buckets {
-		percent := float64(b.Count) / float64(h.collector.Count) * 100
+	for _, b := range output.Buckets {
+		percent := float64(b.Count) / float64(output.Count) * 100
 		result.Values = append(result.Values, []any{b.Min, b.Max, strconv.Itoa(b.Count), percent})
 	}
-}
-
-// squash uses the same greedy adjacent-pair merging as dynhist's AvgWidth
-// collector, but only after all rows have been collected at the higher limit.
-// Merge whole buckets so their counts, sums and observed ranges are preserved.
-func (h *histogramCollector) squash() {
-	buckets := h.collector.Buckets
-	for len(buckets) > h.resultBuckets {
-		merge := 1
-		minWidth := dynhist.AvgWidth(buckets[0], buckets[1], h.collector.Bucket)
-
-		for i := 2; i < len(buckets); i++ {
-			width := dynhist.AvgWidth(buckets[i-1], buckets[i], h.collector.Bucket)
-			if width < minWidth {
-				merge = i
-				minWidth = width
-			}
-		}
-
-		buckets[merge-1].Max = buckets[merge].Max
-		buckets[merge-1].Count += buckets[merge].Count
-		buckets[merge-1].Sum += buckets[merge].Sum
-		copy(buckets[merge:], buckets[merge+1:])
-		buckets = buckets[:len(buckets)-1]
-	}
-
-	h.collector.Buckets = buckets
 }
 
 func exportHistogram(result *Result, file string) error {
