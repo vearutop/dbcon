@@ -358,3 +358,87 @@ func TestHistogramCSVExport(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "min,max,count,percent\n12,36,5,100\n", string(data))
 }
+
+func TestHistogramHeatmap(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() }) //nolint:errcheck
+
+	// Rows are deliberately unsorted by x; x=10 has 3 observations, x=2 has 4.
+	const query = "WITH d(cnt, v, x) AS (VALUES (1, 5, 10), (2, 50, 10), (3, 5, 2), (1, 50, 2)) SELECT cnt, v, x FROM d"
+
+	result := makeResult(context.Background(), db, "test", "-- histogram:buckets=2\n-- plot:heatmap\n"+query, Options{})
+	require.Empty(t, result.Error)
+	require.NotNil(t, result.Histogram)
+	assert.True(t, result.Histogram.Heatmap)
+	assert.True(t, result.Histogram.XNumeric)
+	assert.Equal(t, []string{"x", "min", "max", "count", "percent"}, result.Columns)
+	assert.Equal(t, [][]any{
+		{float64(2), float64(5), float64(5), "3", float64(75)},
+		{float64(2), float64(50), float64(50), "1", float64(25)},
+		{float64(10), float64(5), float64(5), "1", float64(1) / float64(3) * 100},
+		{float64(10), float64(50), float64(50), "2", float64(2) / float64(3) * 100},
+	}, result.Values)
+
+	// x selected by name, categorical keeps first-seen order.
+	result = makeResult(context.Background(), db, "test",
+		"-- histogram:buckets=2 x=k\n-- plot:heatmap\nSELECT 1, 5, 'b' k, 'z' UNION ALL SELECT 1, 50, 'a', 'z' UNION ALL SELECT 1, 5, 'b', 'z'", Options{})
+	require.Empty(t, result.Error)
+	assert.False(t, result.Histogram.XNumeric)
+	assert.Equal(t, [][]any{
+		{"b", float64(5), float64(5), "2", float64(100)},
+		{"a", float64(50), float64(50), "1", float64(100)},
+	}, result.Values)
+
+	// Without the heatmap directive a third column is ignored.
+	plain := makeResult(context.Background(), db, "test", "-- histogram:buckets=2\n"+query, Options{})
+	require.Empty(t, plain.Error)
+	assert.False(t, plain.Histogram.Heatmap)
+	assert.Equal(t, []string{"min", "max", "count", "percent"}, plain.Columns)
+
+	missing := makeResult(context.Background(), db, "test", "-- histogram\n-- plot:heatmap\nSELECT 1, 2", Options{})
+	assert.Contains(t, missing.Error, "expect count, value and x")
+}
+
+func TestHistogramSeries(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() }) //nolint:errcheck
+
+	// Series are in first-seen order, percent is of all observations (8 in total).
+	const rowsQuery = "WITH d(cnt, v, s) AS (VALUES (2, 5, 'b'), (1, 50, 'b'), (3, 5, 'a'), (2, 50, 'a')) SELECT cnt, v, s FROM d"
+
+	result := makeResult(context.Background(), db, "test", "-- histogram:buckets=2\n-- plot:rows\n"+rowsQuery, Options{})
+	require.Empty(t, result.Error)
+	require.NotNil(t, result.Histogram)
+	assert.True(t, result.Histogram.Series)
+	assert.False(t, result.Histogram.Heatmap)
+	assert.Equal(t, []string{"series", "min", "max", "count", "percent"}, result.Columns)
+	assert.Equal(t, [][]any{
+		{"b", float64(5), float64(5), "2", float64(25)},
+		{"b", float64(50), float64(50), "1", float64(12.5)},
+		{"a", float64(5), float64(5), "3", float64(37.5)},
+		{"a", float64(50), float64(50), "2", float64(25)},
+	}, result.Values)
+
+	// Wide shape: value, then a count column per series named by the column.
+	wide := makeResult(context.Background(), db, "test",
+		"-- histogram:buckets=2\n-- plot:cols\nWITH d(v, us, de) AS (VALUES (5, 2, 3), (50, 1, 2)) SELECT v, us, de FROM d", Options{})
+	require.Empty(t, wide.Error)
+	assert.True(t, wide.Histogram.Series)
+	assert.Equal(t, "v", wide.Histogram.Value)
+	assert.Equal(t, [][]any{
+		{"us", float64(5), float64(5), "2", float64(25)},
+		{"us", float64(50), float64(50), "1", float64(12.5)},
+		{"de", float64(5), float64(5), "3", float64(37.5)},
+		{"de", float64(50), float64(50), "2", float64(25)},
+	}, wide.Values)
+
+	// Two columns with plot:cols or plot:rows keep the plain histogram shape.
+	for _, directive := range []string{"-- plot:cols\n", "-- plot:rows\n"} {
+		plain := makeResult(context.Background(), db, "test", "-- histogram:buckets=2\n"+directive+"SELECT 3, 5", Options{})
+		require.Empty(t, plain.Error)
+		assert.False(t, plain.Histogram.Series)
+		assert.Equal(t, []string{"min", "max", "count", "percent"}, plain.Columns)
+	}
+}
