@@ -20,7 +20,7 @@ require (
 	github.com/swaggest/usecase v1.3.1
 	github.com/vearutop/dynhist-go v1.3.0
 	github.com/vearutop/flatjsonl v0.9.8
-	github.com/vearutop/plot-go v0.1.0
+	github.com/vearutop/plot-go v0.2.0
 	github.com/vearutop/statigz v1.5.0
 	github.com/yuin/goldmark v1.7.17
 	gopkg.in/yaml.v3 v3.0.1

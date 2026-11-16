@@ -67,22 +67,35 @@ function renderResult(result, idx) {
         res += '<span>Rows: ' + rowsCnt + ', elapsed: ' + result.elapsed + '</span>\n'
     }
 
-    if (result.histogram) {
-        res += renderHistogramPercentiles(result.histogram)
-    }
-
     let plotOpts = plotDirectiveOpts(result.statement)
+
+    if (result.histogram) {
+        res += renderHistogramPercentiles(result.histogram, plotOpts && plotOpts.value && plotOpts.value.unit === 's' ? formatSeconds : Number)
+    }
 
     // A pie needs at least 2 rows to mean anything; fall back to a table otherwise.
     if (plotOpts && plotOpts.kind === 'pie' && (!result.values || result.values.length <= 1)) {
         plotOpts = null
     }
 
-    if (plotOpts && result.histogram) {
+    if (plotOpts && result.histogram && result.histogram.heatmap) {
+        let containerId = 'heatmap-' + idx
+        plotOpts.kind = 'heatmap'
+        plotOpts.heatmap = {percent: !!result.histogram.percent}
+        if (!result.histogram.x_numeric) {
+            plotOpts.x = {...plotOpts.x, type: 'category'}
+        }
+        res += '<div id="' + containerId + '"></div>' +
+            '<script>Plot.draw(' + JSON.stringify(containerId) + ', ' +
+            JSON.stringify(result) + ', ' + JSON.stringify(plotOpts) + ')<\/script>'
+    } else if (plotOpts && result.histogram) {
         let containerId = 'histogram-' + idx
+        plotOpts.kind = 'histogram'
+        plotOpts.histogram = {percent: !!result.histogram.percent}
+        plotOpts.value = {...plotOpts.value, label: result.histogram.value}
         // Keep the closing script tag escaped for portable HTML reports.
         res += '<div id="' + containerId + '"></div>' +
-            '<script>drawHistogram(' + JSON.stringify(containerId) + ', ' +
+            '<script>Plot.draw(' + JSON.stringify(containerId) + ', ' +
             JSON.stringify(result) + ', ' + JSON.stringify(plotOpts) + ')<\/script>'
     } else if (plotOpts) {
         let containerId = (plotOpts.kind === 'pie' ? 'pie-' : 'plot-') + idx
@@ -108,156 +121,98 @@ function renderResult(result, idx) {
     $('#query-results').append('<div>' + res + '</div>')
 }
 
-function renderHistogramPercentiles(histogram) {
+/**
+ * Formats seconds like Go's time.Duration, e.g. 1h34m2s, 1.5s, 300ms.
+ * @param {number|string} v
+ * @returns {string}
+ */
+function formatSeconds(v) {
+    v = Number(v)
+    if (!isFinite(v)) return String(v)
+    if (v === 0) return '0s'
+    const sign = v < 0 ? '-' : ''
+    v = Math.abs(v)
+    if (v < 1) {
+        for (const [unit, mul] of [['ms', 1e3], ['µs', 1e6], ['ns', 1e9]]) {
+            if (v * mul >= 1 || unit === 'ns') return sign + parseFloat((v * mul).toFixed(3)) + unit
+        }
+    }
+    const d = Math.floor(v / 86400), h = Math.floor(v % 86400 / 3600), m = Math.floor(v % 3600 / 60)
+    const sec = parseFloat((v % 60).toFixed(3))
+    return sign + (d ? d + 'd' : '') + (d || h ? h + 'h' : '') + (d || h || m ? m + 'm' : '') + sec + 's'
+}
+
+function renderHistogramPercentiles(histogram, fmt) {
     const estimates = histogram.percentiles || []
     if (!estimates.length) return ''
 
     return '<div class="histogram-percentiles" style="margin:12px 0;display:flex;gap:16px;flex-wrap:wrap">' +
         estimates.map(p => '<span title="Approximate upper bound from collection bucket [' +
-            Number(p.min) + ':' + Number(p.max) + '], before squashing"><strong>P' +
-            Number(p.percent) + '</strong> ≈ ' + Number(p.value) + '</span>').join('') + '</div>'
-}
-
-// Histogram bars are equally spaced categories. Their labels show the observed
-// range in each adaptive bucket; horizontal widths do not imply equal ranges.
-function drawHistogram(containerId, result, opts) {
-    const container = document.getElementById(containerId)
-    const rows = result.values || []
-    if (!rows.length) {
-        container.textContent = 'No histogram observations.'
-        return
-    }
-
-    const percent = result.histogram.percent
-    const range = row => '[' + row[0] + ':' + row[1] + ']'
-    const detail = row => Number(row[3]).toFixed(2) + '% of items have ' +
-        result.histogram.value + ' in ' + range(row) + ' (' + row[2] + ' items)'
-    const tooltip = document.createElement('div')
-    tooltip.hidden = true
-    tooltip.style.cssText = 'position:absolute;pointer-events:none;background:#222;color:#fff;' +
-        'padding:6px 9px;border-radius:4px;z-index:10;white-space:nowrap'
-
-    const chart = new uPlot({
-        width: Math.max(300, container.clientWidth || 600),
-        height: opts.height || 360,
-        title: opts.caption || result.histogram.value + ' distribution',
-        scales: {
-            x: {time: false, range: (u, min, max) => [min - 0.5, max + 0.5]},
-            y: {auto: true, range: (u, min, max) => [0, max > 0 ? max * 1.1 : 1]},
-        },
-        axes: [
-            {
-                label: result.histogram.value + ' range',
-                size: 90,
-                rotate: -30,
-                splits: (u, axisIdx, min, max) => {
-                    const start = Math.max(0, Math.ceil(min))
-                    const end = Math.min(rows.length - 1, Math.floor(max))
-                    const step = Math.max(1, Math.ceil((end - start + 1) / Math.max(1, Math.floor(u.width / 100))))
-                    const ticks = []
-                    for (let i = start; i <= end; i += step) ticks.push(i)
-                    return ticks
-                },
-                values: (u, ticks) => ticks.map(tick => rows[tick] ? range(rows[tick]) : ''),
-            },
-            {
-                label: percent ? 'Items (%)' : 'Items',
-                size: 80,
-                values: (u, ticks) => ticks.map(tick => percent ? tick + '%' :
-                    Number(tick).toLocaleString(undefined, {notation: 'compact', maximumFractionDigits: 2})),
-            },
-        ],
-        series: [
-            {label: 'Range', value: (u, value, seriesIdx, idx) => rows[idx] ? range(rows[idx]) : '—'},
-            {
-                label: percent ? 'Items (%)' : 'Items',
-                paths: uPlot.paths.bars({size: [0.9, 100]}),
-                fill: '#4682b4',
-                stroke: '#32658f',
-                points: {show: false},
-                value: (u, value, seriesIdx, idx) => rows[idx] ? rows[idx][2] + ' (' + Number(rows[idx][3]).toFixed(2) + '%)' : '—',
-            },
-        ],
-        hooks: {
-            destroy: [],
-            ready: [u => { u.over.appendChild(tooltip) }],
-            setCursor: [u => {
-                const row = rows[u.cursor.idx]
-                tooltip.hidden = !row || u.cursor.left < 0 || u.cursor.top < 0
-                if (!tooltip.hidden) {
-                    tooltip.textContent = detail(row)
-                    tooltip.style.left = Math.max(0, Math.min(u.cursor.left + 12, u.over.clientWidth - tooltip.offsetWidth)) + 'px'
-                    tooltip.style.top = Math.max(0, u.cursor.top - tooltip.offsetHeight - 12) + 'px'
-                }
-            }],
-        },
-    }, [rows.map((row, i) => i), rows.map(row => Number(percent ? row[3] : row[2]))], container)
-
-    // Portable reports use this same renderer and need no additional assets.
-    if (typeof ResizeObserver !== 'undefined') {
-        const observer = new ResizeObserver(() => {
-            if (!container.isConnected) {
-                chart.destroy()
-                return
-            }
-            chart.setSize({width: Math.max(300, container.clientWidth || 600), height: opts.height || 360})
-        })
-        observer.observe(container)
-        chart.hooks.destroy.push(() => observer.disconnect())
-    }
+            fmt(p.min) + ':' + fmt(p.max) + '], before squashing"><strong>P' +
+            Number(p.percent) + '</strong> ≈ ' + fmt(p.value) + '</span>').join('') + '</div>'
 }
 
 /**
- * Parses dbcon's `-- plot:*` SQL comment directives into options for Plot.draw.
+ * Parses dbcon's `-- plot:*` SQL comment directives into options for Plot.draw (plot-go's Options).
+ *
+ * Short aliases choose the chart: `-- plot:time` (x.type=time), `-- plot:heatmap`, `-- plot:pie`,
+ * `-- plot:stacked_bars`, `-- plot:rows`. Everything else is `-- plot:path=value`, a dotted path into the options,
+ * e.g. `-- plot:value.unit=s`, `-- plot:x.format={YYYY}-{MM}`, `-- plot:pie.total=123`;
+ * `caption` and `height` are bare keys.
  * @param {String} statement
  * @returns {Object|null}
  */
 function plotDirectiveOpts(statement) {
-    if (statement.includes("-- plot:pie")) {
-        let opts = {kind: 'pie'}
-
-        let m = statement.match(/plot:pie:total=(\d+)/)
-        if (m && m[1]) {
-            opts.pieTotal = parseFloat(m[1])
-        }
-
-        return opts
-    }
-
-    if (!statement.includes("-- plot")) {
+    const directives = [...statement.matchAll(/^[ \t]*--[ \t]*plot(?::(.*))?$/gm)]
+    if (!directives.length) {
         return null
     }
 
-    let opts = {kind: 'line'}
-
-    let captionMatch = statement.match(/plot:caption=(.+)/)
-    if (captionMatch && captionMatch[1]) {
-        opts.caption = captionMatch[1].trim()
+    const opts = {kind: 'line'}
+    const aliases = {
+        time: ['x.type', 'time'],
+        heatmap: ['kind', 'heatmap'],
+        pie: ['kind', 'pie'],
+        stacked_bars: ['stackedBars', true],
+        rows: ['rows', true],
     }
 
-    let heightMatch = statement.match(/plot:height=(\d+)(?:px)?/)
-    if (heightMatch && heightMatch[1]) {
-        opts.height = parseInt(heightMatch[1], 10)
-    }
+    for (const m of directives) {
+        const dir = (m[1] || '').trim()
+        const eq = dir.indexOf('=')
+        const key = (eq < 0 ? dir : dir.slice(0, eq)).trim()
+        const value = eq < 0 ? '' : dir.slice(eq + 1).trim()
 
-    if (statement.includes('-- plot:time')) {
-        opts.time = true
-
-        let m = statement.match(/plot:time_axis_fmt=([^\s]+)/)
-        if (m && m[1]) {
-            opts.timeAxisFmt = m[1]
+        if (key in aliases && eq < 0) {
+            setPlotOpt(opts, aliases[key][0], aliases[key][1])
+        } else if (key === 'caption') {
+            opts.caption = value
+        } else if (key === 'height') {
+            opts.height = parseInt(value, 10) || undefined
+        } else if (key.includes('.') && eq >= 0) {
+            setPlotOpt(opts, key, /^-?\d+(\.\d+)?$/.test(value) ? parseFloat(value) : value)
         }
     }
 
-    if (statement.includes('-- plot:stacked_bars')) {
-        opts.stackedBars = true
-    }
-
-    if (statement.includes('-- plot:rows')) {
-        opts.rows = true
-    }
-
     return opts
+}
+
+/**
+ * Sets a dotted path in opts, creating nested objects.
+ * @param {Object} opts
+ * @param {String} path
+ * @param {*} value
+ */
+function setPlotOpt(opts, path, value) {
+    const keys = path.split('.')
+    const last = keys.pop()
+    for (const k of keys) {
+        if (typeof opts[k] !== 'object' || opts[k] === null) {
+            opts[k] = {}
+        }
+        opts = opts[k]
+    }
+    opts[last] = value
 }
 
 /**

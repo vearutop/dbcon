@@ -131,11 +131,15 @@ First column is used for X axis, remaining columns go to Y axis.
 
 X-axis can be a UTC datetime if values are UNIX timestamp integers and statement has a comment `-- plot:time`.
 
-Use `-- plot:time_axis_fmt={YYYY}-{MM}` to override time axis label format (default is `{HH}:{mm}\n{YYYY}-{MM}-{DD}`).
+Use `-- plot:x.format={YYYY}-{MM}` to override time axis label format (default is `{HH}:{mm}\n{YYYY}-{MM}-{DD}`).
 
 Use `-- plot:caption=My dataset` to set a plot caption.
 
 Use `-- plot:height=360px` to override plot height.
+
+Use `-- plot:x.unit=s` / `-- plot:y.unit=s` when values of that axis are seconds, to show them as Go-style durations (`5d23h12m5s`) on the axis (and in the legend for X). `x.unit` is ignored with `-- plot:time`. For histograms and heatmaps use `-- plot:value.unit=s`, whichever axis the value is on.
+
+Plot settings are `-- plot:path=value` lines with a dotted path into [plot-go](https://github.com/vearutop/plot-go)'s options (`x.type`, `x.unit`, `x.format`, `y.unit`, `value.unit`, `pie.total`, ...); `caption` and `height` are bare keys. Short directives choose the chart: `-- plot:time` (same as `x.type=time`), `-- plot:heatmap`, `-- plot:pie`, `-- plot:stacked_bars`, `-- plot:rows`. Unknown paths are passed through and ignored by the chart.
 
 For stacked bars, add `-- plot:stacked_bars`. Combine with `-- plot:rows` for `x, y, label` shape or omit for `x, y1, y2...`.
 
@@ -143,7 +147,7 @@ If a statement has `-- plot:pie` in comment, result is rendered as a pie chart.
 
 First column is used for the numeric value of pie slice, second is a label.
 
-Pie total is calculated as sum of all values, for cases of partial pie you can provide the total with `-- plot:pie:total=123`.
+Pie total is calculated as sum of all values, for cases of partial pie you can provide the total with `-- plot:pie.total=123`.
 
 ## Histograms
 
@@ -161,14 +165,30 @@ Use your database's string-length function (`length`, `strlen`, etc.).
 Row order and aggregation can affect adaptive bucket boundaries, while weighted totals remain the same.
 
 Without a plot directive, results are a table of `min`, `max`, `count`, and `percent`.
-With `-- plot:stacked_bars`, each bar represents a bucket; labels show its observed range and tooltips show its count and percentage of all collected observations.
+With any `-- plot` directive (a bare `-- plot` is enough), each bar represents a bucket; labels show its observed range and tooltips show its count and percentage of all collected observations.
 Bars are equally spaced categories, even when numeric ranges have different widths.
+To stack series, add a third column with the series label and use `-- plot:rows` (same as the `x, y, label` shape of other plots): rows are `(count, value, series)`, all series are binned into the same `buckets` ranges (taken from the whole result), and the result rows are `series, min, max, count, percent`, where percent is of all observations, so the stack sums to 100%. Series are stacked in the order of appearance, the legend toggles them. Select the series column by name with `-- histogram:series=col`.
+
+```sql
+-- histogram:buckets=30
+-- plot:rows
+-- plot:value.unit=s
+SELECT count(1), round(install_time) t, channel FROM installs GROUP BY t, channel;
+```
+
+With `-- plot:cols` and three or more columns the input is wide instead: the first column is the value and each other column is the count of a series named by the column (`SELECT t, sum(channel = 'ads') ads, sum(channel = 'organic') organic FROM installs GROUP BY t`). With two columns `-- plot:rows` and `-- plot:cols` change nothing. Percentiles are calculated over all series.
+
+`-- plot:heatmap` (with `-- histogram`) expects `count, value, x` columns and builds one histogram per distinct `x`, all binned into the same `buckets` ranges (taken from the whole result). Result rows are `x, min, max, count, percent`, where percent is relative to the `x` slice. `x` is sorted numerically when all values are numbers, otherwise kept in first-seen order; select it by name with `-- histogram:x=col`. Cells are colored by percent of the slice (with `-- histogram:percent`) or by count; value buckets are drawn as equal-height rows, so `distribution=exp` or `latency` spreads them like a log scale. `-- plot:time` formats numeric `x` as UTC time; `-- plot:x.unit=s` formats the `x` axis and `-- plot:value.unit=s` the value axis (and percentiles) as durations.
+
+`-- plot:value.unit=s` treats histogram values as seconds and shows bucket ranges and percentiles as Go-style durations (`5d23h12m5s`, `1.5s`, `300ms`).
+
 `-- plot:caption=...` and `-- plot:height=...` also apply.
 
 Options can be combined on one directive or supplied on separate histogram directive lines:
 
 * `-- histogram:buckets=20`: maximum number of output buckets (default 20, allowed 1–10000).
 * `-- histogram:buckets=20 collect_buckets=200`: retain up to 200 buckets while scanning, then merge adjacent buckets down to at most 20 for display and CSV export. This keeps finer detail during collection with bounded memory. `collect_buckets` defaults to 200 (or `buckets` if higher), must be at least `buckets`, and supports the same 1–10000 range. Final merging uses the same smallest combined range strategy as collection and preserves counts and sums.
+* `-- histogram:distribution=latency`: bucket width strategy, one of `linear` (default, equal-width buckets), `latency` (narrow buckets for low values, wider for high) or `exp` (exponentially growing, dynhist `ExpWidth`; tune with `sum_width_pow` (default 1.2, raise to widen low-value buckets) and `spacing_pow` (default 1, raise to widen high-value buckets), both numbers greater than 0, only used by `exp`). Applies to both collection and final merging.
 * `-- histogram:count=cnt value=l`: select columns by exact alias, overriding the default first and second columns.
 * `-- histogram:percent`: display percentages instead of counts on the chart's Y axis.
 * `-- histogram:percentiles=50,90,95,99`: show percentile estimates above the chart or table. Values must be greater than 0 and at most 100; fractional percentiles such as `99.9` are supported. Estimates use dynhist's batch `Percentiles` API and nearest-rank selection on the weighted collection buckets **before squashing**, and use the same units as the value column. Hover an estimate to see its collection bucket range. Empty distributions have no percentile estimates.
