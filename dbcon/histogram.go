@@ -62,14 +62,57 @@ type heatRow struct {
 	weight int
 }
 
+const histogramCount = "count"
+
+// histogramDirectives are settings that are known only after all directives are parsed.
+type histogramDirectives struct {
+	found                   bool
+	collectionBuckets       int
+	exp                     bool
+	sumWidthPow, spacingPow float64
+	countName, valueName    string
+	xName                   string
+}
+
 func newHistogram(statement string, cols []string) (*histogramCollector, error) {
 	h := &histogramCollector{valueCol: 1, resultBuckets: dynhist.DefaultBucketsLimit}
-	collectionBuckets := 0
-	exp := false
-	sumWidthPow, spacingPow := 1.2, 1.0
-	countName, valueName, xName := "", "", ""
-	found := false
+	d := histogramDirectives{sumWidthPow: 1.2, spacingPow: 1}
 
+	if err := h.parseDirectives(statement, &d); err != nil {
+		return nil, err
+	}
+
+	if !d.found {
+		return nil, nil //nolint:nilnil
+	}
+
+	if d.exp {
+		h.collector.WeightFunc = dynhist.ExpWidth(d.sumWidthPow, d.spacingPow)
+	}
+
+	if d.collectionBuckets == 0 {
+		d.collectionBuckets = max(200, h.resultBuckets)
+	}
+
+	if d.collectionBuckets < h.resultBuckets {
+		return nil, fmt.Errorf("histogram: collect_buckets must be at least buckets")
+	}
+
+	h.collector.BucketsLimit = d.collectionBuckets
+
+	if len(cols) < 2 {
+		return nil, fmt.Errorf("histogram: expected count and value columns")
+	}
+
+	if err := h.selectColumns(cols, d); err != nil {
+		return nil, err
+	}
+
+	return h, nil
+}
+
+// parseDirectives reads histogram and plot shape directives from line comments of the statement.
+func (h *histogramCollector) parseDirectives(statement string, d *histogramDirectives) error {
 	for i := 0; i < len(statement); {
 		start := i
 		i = templateSQLChunkEnd(statement, i)
@@ -103,140 +146,131 @@ func newHistogram(statement string, cols []string) (*histogramCollector, error) 
 			continue
 		}
 
-		found = true
+		d.found = true
 		params := strings.TrimPrefix(strings.TrimPrefix(comment, "histogram"), ":")
 
 		for _, param := range strings.Fields(params) {
-			key, value, _ := strings.Cut(param, "=")
-			switch key {
-			case "buckets", "collect_buckets":
-				n, err := strconv.Atoi(value)
-				if err != nil || n < 1 || n > 10000 {
-					return nil, fmt.Errorf("histogram: %s must be between 1 and 10000", key)
-				}
-
-				if key == "buckets" {
-					h.resultBuckets = n
-				} else {
-					collectionBuckets = n
-				}
-			case "sum_width_pow", "spacing_pow":
-				p, err := strconv.ParseFloat(value, 64)
-				if err != nil || math.IsNaN(p) || math.IsInf(p, 0) || p <= 0 {
-					return nil, fmt.Errorf("histogram: %s must be a number greater than 0", key)
-				}
-
-				if key == "spacing_pow" {
-					spacingPow = p
-				} else {
-					sumWidthPow = p
-				}
-			case "distribution":
-				exp = false
-
-				switch value {
-				case "linear":
-					h.collector.WeightFunc = dynhist.AvgWidth
-				case "latency":
-					h.collector.WeightFunc = dynhist.LatencyWidth
-				case "exp", "exponential":
-					h.collector.WeightFunc = nil // Built after parsing, powers may follow.
-					exp = true
-				default:
-					return nil, fmt.Errorf("histogram: distribution must be linear, latency or exp")
-				}
-			case "count":
-				if value == "" {
-					return nil, fmt.Errorf("histogram: count requires a column name")
-				}
-
-				countName = value
-			case "x", "series":
-				if value == "" {
-					return nil, fmt.Errorf("histogram: %s requires a column name", key)
-				}
-
-				xName = value
-			case "value":
-				if value == "" {
-					return nil, fmt.Errorf("histogram: value requires a column name")
-				}
-
-				valueName = value
-			case histogramPercent:
-				if param != histogramPercent {
-					return nil, fmt.Errorf("histogram: use percent without a value")
-				}
-
-				h.info.Percent = true
-			case "percentiles":
-				h.percentiles = nil
-
-				for _, item := range strings.Split(value, ",") {
-					p, err := strconv.ParseFloat(item, 64)
-					if err != nil || math.IsNaN(p) || math.IsInf(p, 0) || p <= 0 || p > 100 {
-						return nil, fmt.Errorf("histogram: percentiles must be comma-separated numbers greater than 0 and at most 100")
-					}
-
-					h.percentiles = append(h.percentiles, p)
-				}
-			default:
-				return nil, fmt.Errorf("histogram: unknown option %q", param)
+			if err := h.applyParam(d, param); err != nil {
+				return err
 			}
 		}
 	}
 
-	if !found {
-		return nil, nil //nolint:nilnil
+	return nil
+}
+
+// applyParam applies one key or key=value parameter of a histogram directive.
+func (h *histogramCollector) applyParam(d *histogramDirectives, param string) error {
+	key, value, _ := strings.Cut(param, "=")
+
+	switch key {
+	case "buckets", "collect_buckets":
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 1 || n > 10000 {
+			return fmt.Errorf("histogram: %s must be between 1 and 10000", key)
+		}
+
+		if key == "buckets" {
+			h.resultBuckets = n
+		} else {
+			d.collectionBuckets = n
+		}
+	case "sum_width_pow", "spacing_pow":
+		p, err := strconv.ParseFloat(value, 64)
+		if err != nil || math.IsNaN(p) || math.IsInf(p, 0) || p <= 0 {
+			return fmt.Errorf("histogram: %s must be a number greater than 0", key)
+		}
+
+		if key == "spacing_pow" {
+			d.spacingPow = p
+		} else {
+			d.sumWidthPow = p
+		}
+	case "distribution":
+		d.exp = false
+
+		switch value {
+		case "linear":
+			h.collector.WeightFunc = dynhist.AvgWidth
+		case "latency":
+			h.collector.WeightFunc = dynhist.LatencyWidth
+		case "exp", "exponential":
+			h.collector.WeightFunc = nil // Built after parsing, powers may follow.
+			d.exp = true
+		default:
+			return fmt.Errorf("histogram: distribution must be linear, latency or exp")
+		}
+	case histogramCount, "x", "series", "value":
+		if value == "" {
+			return fmt.Errorf("histogram: %s requires a column name", key)
+		}
+
+		switch key {
+		case histogramCount:
+			d.countName = value
+		case "value":
+			d.valueName = value
+		default:
+			d.xName = value
+		}
+	case histogramPercent:
+		if param != histogramPercent {
+			return fmt.Errorf("histogram: use percent without a value")
+		}
+
+		h.info.Percent = true
+	case "percentiles":
+		h.percentiles = nil
+
+		for _, item := range strings.Split(value, ",") {
+			p, err := strconv.ParseFloat(item, 64)
+			if err != nil || math.IsNaN(p) || math.IsInf(p, 0) || p <= 0 || p > 100 {
+				return fmt.Errorf("histogram: percentiles must be comma-separated numbers greater than 0 and at most 100")
+			}
+
+			h.percentiles = append(h.percentiles, p)
+		}
+	default:
+		return fmt.Errorf("histogram: unknown option %q", param)
 	}
 
-	if exp {
-		h.collector.WeightFunc = dynhist.ExpWidth(sumWidthPow, spacingPow)
+	return nil
+}
+
+// columnIndex finds the only column with the name.
+func columnIndex(cols []string, name string) (int, error) {
+	index := slices.Index(cols, name)
+	if index == -1 {
+		return 0, fmt.Errorf("histogram: unknown column %q", name)
 	}
 
-	if collectionBuckets == 0 {
-		collectionBuckets = max(200, h.resultBuckets)
+	if slices.Index(cols[index+1:], name) != -1 {
+		return 0, fmt.Errorf("histogram: ambiguous column %q", name)
 	}
 
-	if collectionBuckets < h.resultBuckets {
-		return nil, fmt.Errorf("histogram: collect_buckets must be at least buckets")
-	}
+	return index, nil
+}
 
-	h.collector.BucketsLimit = collectionBuckets
-
-	if len(cols) < 2 {
-		return nil, fmt.Errorf("histogram: expected count and value columns")
-	}
-
+// selectColumns finds count, value and x (series) columns and the shape of the histogram.
+func (h *histogramCollector) selectColumns(cols []string, d histogramDirectives) error {
 	for _, selection := range []struct {
 		name  string
 		index *int
-	}{{countName, &h.countCol}, {valueName, &h.valueCol}} {
+	}{{d.countName, &h.countCol}, {d.valueName, &h.valueCol}} {
 		if selection.name == "" {
 			continue
 		}
 
-		index := -1
-
-		for i, name := range cols {
-			if name == selection.name {
-				if index != -1 {
-					return nil, fmt.Errorf("histogram: ambiguous column %q", name)
-				}
-
-				index = i
-			}
-		}
-
-		if index == -1 {
-			return nil, fmt.Errorf("histogram: unknown column %q", selection.name)
+		index, err := columnIndex(cols, selection.name)
+		if err != nil {
+			return err
 		}
 
 		*selection.index = index
 	}
 
 	if h.countCol == h.valueCol {
-		return nil, fmt.Errorf("histogram: count and value must be different columns")
+		return fmt.Errorf("histogram: count and value must be different columns")
 	}
 
 	h.cols = cols
@@ -250,35 +284,36 @@ func newHistogram(statement string, cols []string) (*histogramCollector, error) 
 		h.info.Series = true
 		h.info.Value = cols[0]
 
-		return h, nil
-	case h.rowsShape && (len(cols) >= 3 || xName != ""):
+		return nil
+	case h.rowsShape && (len(cols) >= 3 || d.xName != ""):
 		h.series = true
 		h.info.Series = true
 	}
 
 	if h.heatmap || h.series {
 		h.xCol = 2
-		if len(cols) < 3 && xName == "" {
-			return nil, fmt.Errorf("histogram: heatmap and plot:rows expect count, value and x (series) columns")
+
+		if len(cols) < 3 && d.xName == "" {
+			return fmt.Errorf("histogram: heatmap and plot:rows expect count, value and x (series) columns")
 		}
 
-		if xName != "" {
-			index := slices.Index(cols, xName)
-			if index == -1 || slices.Index(cols[index+1:], xName) != -1 {
-				return nil, fmt.Errorf("histogram: unknown or ambiguous column %q", xName)
+		if d.xName != "" {
+			index, err := columnIndex(cols, d.xName)
+			if err != nil {
+				return err
 			}
 
 			h.xCol = index
 		}
 
 		if h.xCol == h.countCol || h.xCol == h.valueCol {
-			return nil, fmt.Errorf("histogram: x (series) must be a different column than count and value")
+			return fmt.Errorf("histogram: x (series) must be a different column than count and value")
 		}
 	}
 
 	h.info.Value = cols[h.valueCol]
 
-	return h, nil
+	return nil
 }
 
 func histogramNumber(value any) (float64, error) {
