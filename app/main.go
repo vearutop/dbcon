@@ -3,8 +3,10 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -54,6 +56,7 @@ var (
 func Main() error { //nolint:funlen,cyclop,maintidx
 	var (
 		listen      string
+		prefix      string
 		skipBrowser bool
 		basicAuth   string
 		tables      string
@@ -62,6 +65,7 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 	)
 
 	flag.StringVar(&listen, "listen", DefaultListenAddress, "listen address, port 0 picks a free random port")
+	flag.StringVar(&prefix, "prefix", "", "URL path prefix, random by default so that the port alone does not give access, \"/\" to serve from the root")
 	flag.BoolVar(&skipBrowser, "s", false, "skip browser opening")
 	flag.StringVar(&basicAuth, "auth", "", "basic auth as user:password")
 	flag.StringVar(&tables, "tables", "", "comma-separated list table names to use for completion and AI")
@@ -91,6 +95,11 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		flag.PrintDefaults()
 
 		return nil
+	}
+
+	prefix, err := urlPrefix(prefix)
+	if err != nil {
+		return err
 	}
 
 	sh := graceful.NewSwitch(time.Second)
@@ -303,7 +312,7 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		s.Wrap(basicAuthMW("restricted access", basicAuth))
 	}
 
-	s.Get("/exit", usecase.NewInteractor(func(ctx context.Context, input struct{}, output *struct{}) error {
+	s.Get(prefix+"exit", usecase.NewInteractor(func(ctx context.Context, input struct{}, output *struct{}) error {
 		sh.Shutdown()
 
 		return nil
@@ -314,7 +323,7 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 			o.TableNames = strings.Split(tables, ",")
 		}
 	})
-	dbcon.Mount(s, "/", dbcon.DefaultDeps(instances), func(options *dbcon.Options) {
+	dbcon.Mount(s, prefix, dbcon.DefaultDeps(instances), func(options *dbcon.Options) {
 		options.AddValueProcessor("img", func(v any) any {
 			if b, ok := v.([]byte); ok {
 				ct := http.DetectContentType(b)
@@ -355,7 +364,7 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 	})
 
 	// Swagger UI endpoint at /docs.
-	s.Docs("/docs", swgui.New)
+	s.Docs(prefix+"docs", swgui.New)
 
 	// Start server.
 	srv := &http.Server{Handler: s, ReadHeaderTimeout: time.Second}
@@ -386,10 +395,12 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		}
 	}
 
-	log.Println("Console available at http://" + addr)
+	consoleURL := "http://" + addr + prefix
+
+	log.Println("Console available at " + consoleURL)
 
 	if !skipBrowser {
-		if err := openBrowser("http://" + addr); err != nil && !strings.Contains(err.Error(), "executable file not found") {
+		if err := openBrowser(consoleURL); err != nil && !strings.Contains(err.Error(), "executable file not found") {
 			log.Println("failed to open browser", err.Error())
 		}
 	}
@@ -397,6 +408,26 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 	sh.Wait()
 
 	return nil
+}
+
+// urlPrefix returns a path prefix with leading and trailing slashes: the value if set, otherwise a random one.
+func urlPrefix(value string) (string, error) {
+	if value == "" {
+		var b [8]byte
+		if _, err := rand.Read(b[:]); err != nil {
+			return "", fmt.Errorf("random url prefix: %w", err)
+		}
+
+		// 64 bits are up to 13 base36 digits, padded to keep the length fixed.
+		return "/" + fmt.Sprintf("%013s", strconv.FormatUint(binary.BigEndian.Uint64(b[:]), 36)) + "/", nil
+	}
+
+	value = strings.Trim(value, "/")
+	if value == "" {
+		return "/", nil
+	}
+
+	return "/" + value + "/", nil
 }
 
 // openBrowser opens the specified URL in the default browser of the user.

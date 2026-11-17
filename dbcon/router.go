@@ -20,18 +20,26 @@ var (
 	staticServer = statigz.FileServer(staticAssets, statigz.FSPrefix("static"))
 )
 
-// Mount instruments the router with handlers.
+// Mount instruments the router with handlers. All routes are served under the path prefix, "/" for the root.
 func Mount(s *web.Service, prefix string, deps Deps, options ...func(*Options)) {
-	s.Get("/", DBConsole(deps, prefix, options...))
-	s.Get("/db.html", DBConsole(deps, prefix, options...))
-	s.Post("/query-db", DBQuery(deps, options...))
-	s.Get("/query-db.csv", DBQueryCSV(deps, options...))
-	s.Post("/prompt", Prompt(deps))
-	s.Post("/refresh-schema", RefreshSchema(deps, options...))
+	if !strings.HasPrefix(prefix, "/") {
+		prefix = "/" + prefix
+	}
 
-	s.Mount("/", http.StripPrefix(prefix, staticServer))
+	if !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+
+	s.Get(prefix, DBConsole(deps, prefix, options...))
+	s.Get(prefix+"db.html", DBConsole(deps, prefix, options...))
+	s.Post(prefix+"query-db", DBQuery(deps, options...))
+	s.Get(prefix+"query-db.csv", DBQueryCSV(deps, options...))
+	s.Post(prefix+"prompt", Prompt(deps))
+	s.Post(prefix+"refresh-schema", RefreshSchema(deps, options...))
+
+	s.Mount(prefix, http.StripPrefix(prefix, staticServer))
 	s.Mount(plotPrefix(prefix), http.StripPrefix(plotPrefix(prefix), plot.Handler()))
-	deps.SchemaRepository().Mount(s, "/json-form/")
+	deps.SchemaRepository().Mount(s, prefix+"json-form/")
 }
 
 // plotPrefix is where the plot package's static assets (uPlot, chart rendering script) are

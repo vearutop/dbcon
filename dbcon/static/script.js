@@ -58,7 +58,7 @@ function renderResult(result, idx) {
     var rowsCnt = 0
     if (result.values && !strip) {
         if (!isPortableReport) {
-            res += '<a href="/query-db.csv?instance=' + encodeURIComponent(result.instance) + '&statement=' + encodeURIComponent(result.statement) + '" style="margin-bottom: 10px" class="btn btn-info" target="_blank">Download CSV</a> '
+            res += '<a href="query-db.csv?instance=' + encodeURIComponent(result.instance) + '&statement=' + encodeURIComponent(result.statement) + '" style="margin-bottom: 10px" class="btn btn-info" target="_blank">Download CSV</a> '
         }
 
         rowsCnt = result.values.length
