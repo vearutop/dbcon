@@ -66,11 +66,11 @@ function downloadHTMLReport() {
     var rtemp = results
 
     var js = ""
-    js += get("/json-form/jquery-3.7.1.min.js") + "\n"
+    js += get("json-form/jquery-3.7.1.min.js") + "\n"
     js += get(scriptSrcEndingWith("uPlot.iife.min.js")) + "\n"
-    js += get("/uFuzzy.iife.js") + "\n"
+    js += get("uFuzzy.iife.js") + "\n"
     js += get(scriptSrcEndingWith("plot.js")) + "\n"
-    js += get("/script.js") + "\n"
+    js += get("script.js") + "\n"
 
     results = rtemp
     res += '<script>' + js + '</script>\n'
@@ -234,7 +234,7 @@ function refreshSchema() {
 
     $.ajax({
         type: 'POST',
-        url: '/refresh-schema',
+        url: 'refresh-schema',
         success: function (data) {
             completions = data.completions
 

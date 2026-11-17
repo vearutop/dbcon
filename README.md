@@ -67,10 +67,14 @@ dbcon [OPTIONS] DB...
         basic auth as user:password
   -listen string
         listen address, port 0 picks a free random port (default "127.0.0.1:0")
+  -prefix string
+        URL path prefix, random by default so that the port alone does not give access, "/" to serve from the root
   -s    skip browser opening
   -tables string
         comma-separated list table names to use for completion and AI
 ```
+
+The console is served under a random URL path prefix (for example `http://127.0.0.1:54321/5k3m0qz9x1b7e/`), which is printed on start and opened in the browser, so a port alone is not enough to reach it. Requests outside the prefix get 404. Use `-prefix` to set a stable prefix (e.g. behind a reverse proxy), or `-prefix /` to serve from the root. The prefix is a convenience against port scanning, not a replacement for `-auth`: it travels in URLs (and so in browser history and shared links).
 
 Multiple statements can be separated with `;`.
 
