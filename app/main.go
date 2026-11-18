@@ -55,7 +55,7 @@ var (
 )
 
 // Main is the main app function.
-func Main() error { //nolint:funlen,cyclop,maintidx
+func Main() error { //nolint:funlen,cyclop
 	var (
 		listen      string
 		prefix      string
@@ -118,12 +118,57 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		defaultSQL = string(b)
 	}
 
+	return Run(context.Background(), Options{
+		DBs:         flag.Args(),
+		SQL:         defaultSQL,
+		FlatConfig:  flatconf,
+		Listen:      listen,
+		Prefix:      prefix,
+		Auth:        basicAuth,
+		Tables:      tables,
+		SkipBrowser: skipBrowser,
+	})
+}
+
+// Options configure Run, they mirror command line flags.
+type Options struct {
+	DBs         []string // Paths to SQLite/CSV/JSONL files or DSNs.
+	SQL         string   // SQL script text to open in the console and run on start.
+	FlatConfig  string   // Flatjsonl config (JSON text or file path) for JSONL import.
+	Listen      string   // Listen address, DefaultListenAddress if empty.
+	Prefix      string   // URL path prefix, random if empty.
+	Auth        string   // Basic auth as user:password.
+	Tables      string   // Comma-separated table names for completion and AI.
+	SkipBrowser bool
+}
+
+// Run serves the console for the given databases, it blocks until the console is exited or ctx is done.
+func Run(ctx context.Context, o Options) error { //nolint:funlen,cyclop,maintidx
+	var (
+		prefix      = o.Prefix
+		listen      = o.Listen
+		defaultSQL  = o.SQL
+		flatconf    = o.FlatConfig
+		basicAuth   = o.Auth
+		tables      = o.Tables
+		skipBrowser = o.SkipBrowser
+	)
+
+	if listen == "" {
+		listen = DefaultListenAddress
+	}
+
 	prefix, err := urlPrefix(prefix)
 	if err != nil {
 		return err
 	}
 
 	sh := graceful.NewSwitch(time.Second)
+
+	go func() {
+		<-ctx.Done()
+		sh.Shutdown()
+	}()
 
 	listener, err := net.Listen("tcp", listen)
 	if err != nil {
@@ -161,7 +206,7 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		return nil
 	}
 
-	for _, dsn := range flag.Args() {
+	for _, dsn := range o.DBs {
 		if strings.HasSuffix(dsn, ".csv") {
 			if err := ensureTempInstance(); err != nil {
 				return err
@@ -424,16 +469,23 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		if consoleURL, err = withSQL(consoleURL, defaultSQL); err != nil {
 			return err
 		}
+	}
 
-		if skipBrowser {
-			log.Println("Console with SQL script: " + consoleURL)
+	opened := false
+
+	if !skipBrowser {
+		if reason := browserUnavailable(); reason != "" {
+			log.Println("not opening browser:", reason)
+		} else if err := openBrowser(consoleURL); err != nil {
+			log.Println("failed to open browser:", err.Error())
+		} else {
+			opened = true
 		}
 	}
 
-	if !skipBrowser {
-		if err := openBrowser(consoleURL); err != nil && !strings.Contains(err.Error(), "executable file not found") {
-			log.Println("failed to open browser", err.Error())
-		}
+	// Without a browser the full link is the only way to see the script result.
+	if defaultSQL != "" && !opened {
+		log.Println("Console with SQL script: " + consoleURL)
 	}
 
 	sh.Wait()
@@ -462,6 +514,28 @@ func urlPrefix(value string) (string, error) {
 }
 
 // openBrowser opens the specified URL in the default browser of the user.
+// browserUnavailable returns a reason why a browser can not be opened for the user, or empty string if it can.
+func browserUnavailable() string {
+	if os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_TTY") != "" {
+		return "remote (ssh) session"
+	}
+
+	switch runtime.GOOS {
+	case "windows", "darwin":
+		return ""
+	}
+
+	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
+		return "no display"
+	}
+
+	if _, err := exec.LookPath("xdg-open"); err != nil {
+		return "xdg-open is not found"
+	}
+
+	return ""
+}
+
 func openBrowser(url string) error {
 	var (
 		cmd  string
