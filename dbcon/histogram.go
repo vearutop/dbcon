@@ -14,7 +14,10 @@ import (
 	dynhist "github.com/vearutop/dynhist-go"
 )
 
-const histogramPercent = "percent"
+const (
+	histogramPercent    = "percent"
+	histogramMaxBuckets = 10000
+)
 
 // Histogram describes the presentation of weighted histogram result rows.
 // Rows contain minimum, maximum, count and percentage, in that order. For heatmaps rows are
@@ -67,6 +70,7 @@ const histogramCount = "count"
 // histogramDirectives are settings that are known only after all directives are parsed.
 type histogramDirectives struct {
 	found                   bool
+	allBuckets              bool
 	collectionBuckets       int
 	exp                     bool
 	sumWidthPow, spacingPow float64
@@ -88,6 +92,10 @@ func newHistogram(statement string, cols []string) (*histogramCollector, error) 
 
 	if d.exp {
 		h.collector.WeightFunc = dynhist.ExpWidth(d.sumWidthPow, d.spacingPow)
+	}
+
+	if d.allBuckets { // A bucket per distinct value (up to the limit), for discrete values, e.g. hours of day.
+		h.resultBuckets = histogramMaxBuckets
 	}
 
 	if d.collectionBuckets == 0 {
@@ -165,8 +173,14 @@ func (h *histogramCollector) applyParam(d *histogramDirectives, param string) er
 
 	switch key {
 	case "buckets", "collect_buckets":
+		if key == "buckets" && value == "all" {
+			d.allBuckets = true
+
+			break
+		}
+
 		n, err := strconv.Atoi(value)
-		if err != nil || n < 1 || n > 10000 {
+		if err != nil || n < 1 || n > histogramMaxBuckets {
 			return fmt.Errorf("histogram: %s must be between 1 and 10000", key)
 		}
 

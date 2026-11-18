@@ -141,8 +141,8 @@ github.com/vearutop/fastjson v1.0.0 h1:4yn7BZj9R52INMqMj1q90gG206Qm9XY54aKfj3ZPC
 github.com/vearutop/fastjson v1.0.0/go.mod h1:H1NX3WgvfAI1gJf9Pk3IKegysfqZOotwqiihA+txgMQ=
 github.com/vearutop/flatjsonl v0.9.8 h1:9NM94EWSiicL8rZLv9/YlHVTMAGgA6cS3m9jBQik1VE=
 github.com/vearutop/flatjsonl v0.9.8/go.mod h1:/X/rp9NwMaDQsjvmy16C9ZSM3ROWdSBnRhORC1rYqFY=
-github.com/vearutop/plot-go v0.2.0 h1:cUPcObid6f9VFO1cxExgj94FoRV/AAe+YgEI5f+k+vk=
-github.com/vearutop/plot-go v0.2.0/go.mod h1:u/PnA1M0q8hVeruxfyF9rgqlOdU+BT7z1L20OARhgTY=
+github.com/vearutop/plot-go v0.2.1 h1:o6VVXjco603UoOUPuqBzL/QMZpuE3mucy8QYdVEVG80=
+github.com/vearutop/plot-go v0.2.1/go.mod h1:u/PnA1M0q8hVeruxfyF9rgqlOdU+BT7z1L20OARhgTY=
 github.com/vearutop/statigz v1.5.0 h1:FuWwZiT82yBw4xbWdWIawiP2XFTyEPhIo8upRxiKLqk=
 github.com/vearutop/statigz v1.5.0/go.mod h1:oHmjFf3izfCO804Di1ZjB666P3fAlVzJEx2k6jNt/Gk=
 github.com/xyproto/randomstring v1.0.5 h1:YtlWPoRdgMu3NZtP45drfy1GKoojuR7hmRcnhZqKjWU=

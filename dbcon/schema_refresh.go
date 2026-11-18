@@ -12,6 +12,7 @@ func staticCompletions(o Options) []SQLCompletion {
 	cmp := []SQLCompletion{ //nolint:prealloc
 		{Value: "-- histogram", Score: 1000, Meta: "collect weighted (count, value) rows into histogram buckets"},
 		{Value: "-- histogram:buckets=20", Score: 1000, Meta: "maximum number of adaptive histogram buckets"},
+		{Value: "-- histogram:buckets=all", Score: 1000, Meta: "one histogram bucket per distinct value"},
 		{Value: "-- histogram:buckets=20 collect_buckets=200", Score: 1000, Meta: "collect finer buckets, then merge to the output limit"},
 		{Value: "-- histogram:count=cnt value=l buckets=20", Score: 1000, Meta: "select histogram columns by name"},
 		{Value: "-- histogram:percent", Score: 1000, Meta: "show percentages on histogram Y axis"},
