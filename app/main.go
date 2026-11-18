@@ -55,7 +55,7 @@ var (
 )
 
 // Main is the main app function.
-func Main() error { //nolint:funlen,cyclop,maintidx
+func Main() error { //nolint:funlen,cyclop
 	var (
 		listen      string
 		prefix      string
