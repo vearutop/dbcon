@@ -195,6 +195,7 @@ With `-- plot:cols` and three or more columns the input is wide instead: the fir
 Options can be combined on one directive or supplied on separate histogram directive lines:
 
 * `-- histogram:buckets=20`: maximum number of output buckets (default 20, allowed 1–10000).
+* `-- histogram:buckets=all`: one bucket per distinct value, for discrete values such as hours or counters (up to 10000 buckets, if there are more distinct values the closest ones are merged). Percentiles are exact in this mode.
 * `-- histogram:buckets=20 collect_buckets=200`: retain up to 200 buckets while scanning, then merge adjacent buckets down to at most 20 for display and CSV export. This keeps finer detail during collection with bounded memory. `collect_buckets` defaults to 200 (or `buckets` if higher), must be at least `buckets`, and supports the same 1–10000 range. Final merging uses the same smallest combined range strategy as collection and preserves counts and sums.
 * `-- histogram:distribution=latency`: bucket width strategy, one of `linear` (default, equal-width buckets), `latency` (narrow buckets for low values, wider for high) or `exp` (exponentially growing, dynhist `ExpWidth`; tune with `sum_width_pow` (default 1.2, raise to widen low-value buckets) and `spacing_pow` (default 1, raise to widen high-value buckets), both numbers greater than 0, only used by `exp`). Applies to both collection and final merging.
 * `-- histogram:count=cnt value=l`: select columns by exact alias, overriding the default first and second columns.

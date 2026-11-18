@@ -442,3 +442,28 @@ func TestHistogramSeries(t *testing.T) {
 		assert.Equal(t, []string{"min", "max", "count", "percent"}, plain.Columns)
 	}
 }
+
+func TestHistogramAllBuckets(t *testing.T) {
+	h, err := newHistogram("-- histogram:buckets=all", []string{"cnt", "value"})
+	require.NoError(t, err)
+	assert.Equal(t, histogramMaxBuckets, h.resultBuckets)
+
+	// More distinct values than the default collection and result limits, each keeps its own bucket.
+	for i := range 500 {
+		require.NoError(t, h.add([]any{i + 1, i}))
+		require.NoError(t, h.add([]any{1, i})) // Same value goes to the same bucket.
+	}
+
+	h.collector.Squash(h.resultBuckets)
+	require.Len(t, h.collector.Buckets, 500)
+
+	for i, b := range h.collector.Buckets {
+		assert.Equal(t, dynhist.Bucket{Min: float64(i), Max: float64(i), Count: i + 2, Sum: float64(i * (i + 2))}, b)
+	}
+
+	_, err = newHistogram("-- histogram:buckets=all collect_buckets=5", []string{"cnt", "value"})
+	require.Error(t, err)
+
+	_, err = newHistogram("-- histogram:buckets=none", []string{"cnt", "value"})
+	require.Error(t, err)
+}
