@@ -65,11 +65,15 @@ dbcon [OPTIONS] DB...
                 my4.log
   -auth string
         basic auth as user:password
+  -decode-form string
+        print SQL statements of an encoded form (value of the form URL parameter, or a full URL) and exit
   -listen string
         listen address, port 0 picks a free random port (default "127.0.0.1:0")
   -prefix string
         URL path prefix, random by default so that the port alone does not give access, "/" to serve from the root
   -s    skip browser opening
+  -sql string
+        SQL script file to open in the console and run on start
   -tables string
         comma-separated list table names to use for completion and AI
 ```
