@@ -108,6 +108,11 @@ function renderResult(result, idx) {
             '<script>Plot.draw(' + JSON.stringify(containerId) + ', ' +
             JSON.stringify({columns: result.columns, values: result.values}) + ', ' +
             JSON.stringify(plotOpts) + ')<\/script>'
+    } else if (!result.columns || !result.columns.length) {
+        // Nothing to tabulate (comments only, DDL), keep the separator without an empty table.
+        res += '<hr/>'
+    } else if (!result.values || !result.values.length) {
+        res += '<p><em>no data</em></p><hr/>'
     } else {
         let transpose = result.statement.includes("-- transpose")
 

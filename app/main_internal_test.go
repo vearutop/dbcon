@@ -1,8 +1,13 @@
 package app
 
 import (
+	"bytes"
+	"encoding/base64"
+	"io"
+	"net/url"
 	"testing"
 
+	"github.com/andybalholm/brotli"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,4 +27,21 @@ func TestURLPrefix(t *testing.T) {
 
 	assert.Regexp(t, `^/[0-9a-z]{13}/$`, a)
 	assert.NotEqual(t, a, b)
+}
+
+func TestWithSQL(t *testing.T) {
+	t.Parallel()
+
+	u, err := withSQL("http://h/p/", "select 1; -- ü")
+	require.NoError(t, err)
+
+	form, err := url.Parse(u)
+	require.NoError(t, err)
+
+	b, err := base64.StdEncoding.DecodeString(form.Query().Get("form"))
+	require.NoError(t, err)
+
+	j, err := io.ReadAll(brotli.NewReader(bytes.NewReader(b)))
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"queries":[{"statement":"select 1; -- ü"}]}`, string(j))
 }

@@ -160,6 +160,11 @@ func decodeForm(b string) (qr QueryRequest, err error) {
 	return qr, nil
 }
 
+// DecodeForm unpacks a form state, as used in the "form" URL parameter.
+func DecodeForm(b string) (QueryRequest, error) {
+	return decodeForm(b)
+}
+
 // DBConsole creates use case interactor to show DB console.
 func DBConsole(deps Deps, prefix string, options ...func(*Options)) usecase.Interactor {
 	if !strings.HasSuffix(prefix, "/") {

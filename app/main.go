@@ -2,6 +2,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -24,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andybalholm/brotli"
 	"github.com/bool64/dev/version"
 	"github.com/bool64/sqluct"
 	_ "github.com/go-sql-driver/mysql" // DB driver.
@@ -62,6 +64,8 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		tables      string
 		flatconf    string
 		ver         bool
+		sqlFile     string
+		decode      string
 	)
 
 	flag.StringVar(&listen, "listen", DefaultListenAddress, "listen address, port 0 picks a free random port")
@@ -70,6 +74,8 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 	flag.StringVar(&basicAuth, "auth", "", "basic auth as user:password")
 	flag.StringVar(&tables, "tables", "", "comma-separated list table names to use for completion and AI")
 	flag.StringVar(&flatconf, "flatconf", "", "flatjsonl config file for JSONL import")
+	flag.StringVar(&sqlFile, "sql", "", "SQL script file to open in the console and run on start")
+	flag.StringVar(&decode, "decode-form", "", "print SQL statements of an encoded form (value of the form URL parameter, or a full URL) and exit")
 	flag.BoolVar(&ver, "version", false, "show version")
 
 	flag.Parse()
@@ -78,6 +84,10 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		println(version.Module("github.com/vearutop/dbcon").Version)
 
 		return nil
+	}
+
+	if decode != "" {
+		return printForm(decode)
 	}
 
 	if flag.NArg() == 0 {
@@ -95,6 +105,17 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 		flag.PrintDefaults()
 
 		return nil
+	}
+
+	var defaultSQL string
+
+	if sqlFile != "" {
+		b, err := os.ReadFile(sqlFile) //nolint:gosec // User-provided path is the point.
+		if err != nil {
+			return fmt.Errorf("read sql file: %w", err)
+		}
+
+		defaultSQL = string(b)
 	}
 
 	prefix, err := urlPrefix(prefix)
@@ -399,6 +420,16 @@ func Main() error { //nolint:funlen,cyclop,maintidx
 
 	log.Println("Console available at " + consoleURL)
 
+	if defaultSQL != "" {
+		if consoleURL, err = withSQL(consoleURL, defaultSQL); err != nil {
+			return err
+		}
+
+		if skipBrowser {
+			log.Println("Console with SQL script: " + consoleURL)
+		}
+	}
+
 	if !skipBrowser {
 		if err := openBrowser(consoleURL); err != nil && !strings.Contains(err.Error(), "executable file not found") {
 			log.Println("failed to open browser", err.Error())
@@ -578,6 +609,50 @@ func loadConfig(value string, cfg *flatjsonl.Config) error {
 		if err != nil {
 			return fmt.Errorf("decode config file: json5: %w, yaml: %s", err, yerr) //nolint
 		}
+	}
+
+	return nil
+}
+
+// withSQL appends a console form with the statement to the URL, the form is executed on open.
+func withSQL(consoleURL, statement string) (string, error) {
+	j, err := json.Marshal(map[string]any{"queries": []map[string]string{{"statement": statement}}})
+	if err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+
+	w := brotli.NewWriter(&buf)
+
+	if _, err := w.Write(j); err != nil {
+		return "", err
+	}
+
+	if err := w.Close(); err != nil {
+		return "", err
+	}
+
+	return consoleURL + "?form=" + url.QueryEscape(base64.StdEncoding.EncodeToString(buf.Bytes())), nil
+}
+
+// printForm prints statements of an encoded form, accepts a form value or a URL containing it.
+func printForm(encoded string) error {
+	if u, err := url.Parse(encoded); err == nil && u.Query().Get("form") != "" {
+		encoded = u.Query().Get("form")
+	}
+
+	qr, err := dbcon.DecodeForm(encoded)
+	if err != nil {
+		return fmt.Errorf("decode form: %w", err)
+	}
+
+	for _, q := range qr.Queries {
+		if q.Instance != "" {
+			fmt.Printf("-- instance: %s\n", q.Instance)
+		}
+
+		fmt.Println(q.Statement)
 	}
 
 	return nil
