@@ -66,7 +66,7 @@ function downloadHTMLReport() {
     var rtemp = results
 
     var js = ""
-    js += get("json-form/jquery-3.7.1.min.js") + "\n"
+    js += get("jquery-3.7.1.min.js") + "\n"
     js += get(scriptSrcEndingWith("uPlot.iife.min.js")) + "\n"
     js += get("uFuzzy.iife.js") + "\n"
     js += get(scriptSrcEndingWith("plot.js")) + "\n"
@@ -109,61 +109,115 @@ function download_file(name, contents, mime_type) {
     dlink.remove();
 }
 
-/**
- * @param {XMLHttpRequest} x
- */
-function onQuerySQLSuccess(x) {
-    // console.log(x.responseText)
-
-    var response = JSON.parse(x.responseText)
-
-    results = response.results
-
-    var url = "?form=" + encodeURIComponent(response.form)
-    // console.log(url)
-
-    $("#link-form").attr("href", url).show()
-    $("#download-report").show()
-
-    // console.log(results)
-
-    renderResults();
-}
+var editor
 
 /**
- * @param {XMLHttpRequest} x
+ * Finds the instance for the end of text: the last `-- instance:name` comment, or the default one.
+ * @param {String} text
+ * @returns {String}
  */
-function onPromptSuccess(x) {
-    console.log(x.responseText)
+function instanceAt(text) {
+    var m, name = defaultInstance
+    var re = /^[ \t]*--[ \t]*instance:[ \t]*(\S.*?)[ \t]*$/gm
 
-    var response = JSON.parse(x.responseText)
+    while ((m = re.exec(text))) {
+        name = m[1]
+    }
 
-    $('#form-result-ask-ai').html(response.message).show()
+    return name
 }
 
-function onPromptBeforeSubmit() {
-    $('#form-result-ask-ai').addClass("spinner").html("<span style='font-size: 15px'>loading...</span>").show()
+function initEditor() {
+    editor = ace.edit('editor')
+    editor.setTheme()
+    editor.setOptions({
+        enableBasicAutocompletion: true,
+        enableLiveAutocompletion: true
+    })
+
+    // The editor box is user-resizable (CSS resize), let Ace follow.
+    new ResizeObserver(function () {
+        editor.resize()
+    }).observe(document.getElementById('editor'))
+
+    // Completions depend on the instance selected by the closest preceding `-- instance:` comment.
+    editor.completers = [{
+        getCompletions: function (editor, session, pos, prefix, callback) {
+            callback(null, completions[instanceAt(session.getTextRange({start: {row: 0, column: 0}, end: pos}))] || [])
+        }
+    }]
+
+    editor.session.setMode("ace/mode/sql")
 }
 
-function onPromptFinished() {
-    $('#form-result-ask-ai').removeClass("spinner")
-}
-
-function onQuerySQLBeforeSubmit() {
+function runQuery() {
     $("#link-form").hide()
     $("#download-report").hide()
+    $('#query-status').addClass("spinner").html("<span style='font-size: 15px'>loading...</span>").show()
 
-    $('#form-result-queries').addClass("spinner").html("<span style='font-size: 15px'>loading...</span>").show()
+    $.ajax({
+        type: 'POST',
+        url: 'query-db',
+        contentType: 'application/json',
+        data: JSON.stringify({statement: editor.getValue()}),
+        success: function (response) {
+            results = response.results
+
+            $("#link-form").attr("href", "?form=" + encodeURIComponent(response.form)).show()
+            $("#download-report").show()
+
+            renderResults()
+        },
+        error: function (x) {
+            $('#query-status').text(x.responseText || x.statusText)
+        },
+        complete: function (x) {
+            $('#query-status').removeClass("spinner")
+            if (x.status === 200) {
+                $('#query-status').hide()
+            }
+        }
+    })
+
+    return false
 }
 
-function onQuerySQLFinished() {
-    $('#form-result-queries').removeClass("spinner").hide()
+var askInstance = null
+
+function sendPrompt() {
+    $('#ask-ai-result').addClass("spinner").html("<span style='font-size: 15px'>loading...</span>").show()
+
+    $.ajax({
+        type: 'POST',
+        url: 'prompt',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            instance: askInstance || instanceAt(editor.getValue()),
+            question: $('#ask-ai-question').val()
+        }),
+        success: function (response) {
+            $('#ask-ai-result').html(response.message)
+        },
+        error: function (x) {
+            $('#ask-ai-result').text(x.responseText || x.statusText)
+        },
+        complete: function () {
+            askInstance = null
+            $('#ask-ai-result').removeClass("spinner")
+        }
+    })
+
+    return false
 }
 
 var completions = {}
 
 function renderColumnsDirectory() {
     var rows = ''
+    var multi = Object.keys(completions).length > 1
+    var inst = function (name) {
+        return multi ? '<td>' + name + '</td>' : ''
+    }
 
     for (var instance in completions) {
         var cmp = completions[instance]
@@ -171,12 +225,12 @@ function renderColumnsDirectory() {
             var item = cmp[i]
 
             if (item.table && item.column) {
-                rows += '<tr><td>' + instance + '</td><td>' + item.table + '</td><td>' + item.column + "</td><td>column</td></tr>\n"
+                rows += '<tr>' + inst(instance) + '<td>' + item.table + '</td><td>' + item.column + "</td><td>column</td></tr>\n"
                 continue
             }
 
             if (item.table) {
-                rows += '<tr><td>' + instance + '</td><td>' + item.table + "</td><td></td><td>table</td></tr>\n"
+                rows += '<tr>' + inst(instance) + '<td>' + item.table + "</td><td></td><td>table</td></tr>\n"
                 continue
             }
         }
@@ -186,15 +240,16 @@ function renderColumnsDirectory() {
         return
     }
 
-    var res = '<table class="pure-table result" style="display: none;margin-top:2em;background: #fff"><thead><tr>';
-    res += '<th>instance</th><th>table</th><th>column</th><th>entity</th>'
+    var res = '<table class="pure-table result"><thead><tr>';
+    res += (multi ? '<th>instance</th>' : '') + '<th>table</th><th>column</th><th>entity</th>'
     res += "</tr></thead>\n"
 
     res += "<tbody>"
     res += rows
     res += "</tbody></table>"
 
-    $('#columns-directory').html('<div class="btn btn-info" onclick="return toggleColumnsDirectory();">Columns Directory</div>' + res)
+    $('#columns-directory').html('<div class="btn btn-info" onclick="return toggleColumnsDirectory();">Columns Directory</div>' +
+        '<div class="overlay" style="display: none">' + res + '</div>')
     $('#columns-directory table').fancyTable({
         sortable: true,
         searchable: true,
@@ -207,24 +262,24 @@ function renderColumnsDirectory() {
 function fixStatementAI(resultIdx) {
     var result = results[resultIdx]
 
-    $('#columns-directory table').hide();
-    $('#form-container-ask-ai').addClass('visible');
+    $('#columns-directory .overlay').hide();
+    $('#ask-ai').show();
 
-    $('#form-container-ask-ai textarea').val("```\n" + result.statement + "\n```\nfailed with\n```\n"+result.error+"\n```\n\nPlease fix or explain the error.")
-    $('#form-container-ask-ai select').val(result.instance);
+    $('#ask-ai-question').val("```\n" + result.statement + "\n```\nfailed with\n```\n"+result.error+"\n```\n\nPlease fix or explain the error.")
+    askInstance = result.instance
 
     return false
 }
 
 function toggleAskAI() {
-    $('#columns-directory table').hide();
-    $('#form-container-ask-ai').toggleClass('visible');
+    $('#columns-directory .overlay').hide();
+    $('#ask-ai').toggle();
     return false;
 }
 
 function toggleColumnsDirectory() {
-    $('#form-container-ask-ai').removeClass('visible');
-    $('#columns-directory table').toggle();
+    $('#ask-ai').hide();
+    $('#columns-directory .overlay').toggle();
     return false;
 }
 
@@ -239,10 +294,6 @@ function refreshSchema() {
             completions = data.completions
 
             renderColumnsDirectory();
-
-            $(".sql-statement").each(function (i, el) {
-                $(el).parent().find('select').trigger('change');
-            });
         },
         error: function (x) {
             alert("Failed to refresh schema: " + x.responseText);
@@ -253,44 +304,4 @@ function refreshSchema() {
     });
 
     return false;
-}
-
-window.jsonform_ace_setup = function(setup){
-    setup()
-
-    $(".sql-statement").each(function(i, el){
-        var instanceSelect = $(el).parent().find('select')
-        var id = $(el).find('.ace_editor').parent().attr('id')
-
-        function prepare() {
-            var instance = instanceSelect.find(":selected").val()
-
-            var editor = ace.edit(id + '__ace')
-            editor.setTheme();
-            editor.setOptions({
-                enableBasicAutocompletion: true,
-                enableLiveAutocompletion: true
-            });
-
-            var cmp = completions[instance]
-
-            editor.completers = []
-
-            if (cmp) {
-                editor.completers.push({
-                    getCompletions: function(editor, session, pos, prefix, callback) {
-                        callback(null, cmp);
-                    }
-                });
-            }
-
-            editor.session.setMode("ace/mode/sql");
-        }
-
-        prepare()
-
-        instanceSelect.on('change', function() {
-            prepare()
-        });
-    })
 }

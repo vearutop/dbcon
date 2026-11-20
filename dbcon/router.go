@@ -39,7 +39,6 @@ func Mount(s *web.Service, prefix string, deps Deps, options ...func(*Options)) 
 
 	s.Mount(prefix, http.StripPrefix(prefix, staticServer))
 	s.Mount(plotPrefix(prefix), http.StripPrefix(plotPrefix(prefix), plot.Handler()))
-	deps.SchemaRepository().Mount(s, prefix+"json-form/")
 }
 
 // plotPrefix is where the plot package's static assets (uPlot, chart rendering script) are

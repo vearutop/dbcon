@@ -32,12 +32,12 @@ func TestHandler_prefix(t *testing.T) {
 	}
 
 	// Everything is served under the prefix.
-	for _, path := range []string{"/secret/", "/secret/db.html", "/secret/script.js", "/secret/plot/plot.js", "/secret/json-form/jquery-3.7.1.min.js"} {
+	for _, path := range []string{"/secret/", "/secret/db.html", "/secret/script.js", "/secret/plot/plot.js", "/secret/jquery-3.7.1.min.js"} {
 		assert.Equal(t, http.StatusOK, do(http.MethodGet, path), path)
 	}
 
 	// And nothing without it.
-	for _, path := range []string{"/", "/db.html", "/script.js", "/plot/plot.js", "/json-form/jquery-3.7.1.min.js", "/query-db.csv"} {
+	for _, path := range []string{"/", "/db.html", "/script.js", "/plot/plot.js", "/jquery-3.7.1.min.js", "/query-db.csv"} {
 		assert.Equal(t, http.StatusNotFound, do(http.MethodGet, path), path)
 	}
 

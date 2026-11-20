@@ -56,6 +56,12 @@ func staticCompletions(o Options) []SQLCompletion {
 // buildCompletions merges each instance's schema completions with the static ones.
 func buildCompletions(deps Deps, o Options) map[string][]SQLCompletion {
 	static := staticCompletions(o)
+	if len(deps.DBInstances()) > 1 {
+		for _, v := range deps.DBInstances() {
+			static = append(static, SQLCompletion{Value: "-- instance:" + v.Name, Score: 1000, Meta: "run following statements on this DB instance"})
+		}
+	}
+
 	completions := map[string][]SQLCompletion{}
 
 	for _, v := range deps.DBInstances() {
@@ -77,7 +83,7 @@ func RefreshSchema(deps Deps, options ...func(*Options)) usecase.Interactor {
 	}
 
 	type req struct {
-		Instance instance `query:"instance" description:"Instance to refresh, all instances if empty"`
+		Instance string `query:"instance" description:"Instance to refresh, all instances if empty"`
 	}
 
 	type resp struct {
@@ -88,7 +94,7 @@ func RefreshSchema(deps Deps, options ...func(*Options)) usecase.Interactor {
 		instances := deps.DBInstances()
 
 		for i, v := range instances {
-			if in.Instance != "" && v.Name != string(in.Instance) {
+			if in.Instance != "" && v.Name != in.Instance {
 				continue
 			}
 

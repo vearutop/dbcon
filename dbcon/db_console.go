@@ -6,16 +6,14 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	_ "embed"
 	"html/template"
 	"io"
-	"net/http"
 	"os"
 	"strings"
 
 	"github.com/andybalholm/brotli"
 	"github.com/bool64/sqluct"
-	jsonform "github.com/swaggest/jsonform-go"
-	"github.com/swaggest/jsonschema-go"
 	"github.com/swaggest/rest/response"
 	"github.com/swaggest/usecase"
 	"github.com/swaggest/usecase/status"
@@ -58,7 +56,6 @@ type DBInstance struct {
 
 // Deps defines required resources.
 type Deps interface {
-	SchemaRepository() *jsonform.Repository
 	DBInstances() []DBInstance
 	Prompter() Prompter
 }
@@ -69,13 +66,8 @@ type Prompter interface {
 }
 
 type dependencies struct {
-	form      *jsonform.Repository
 	instances []DBInstance
 	prompter  Prompter
-}
-
-func (d dependencies) SchemaRepository() *jsonform.Repository {
-	return d.form
 }
 
 func (d dependencies) DBInstances() []DBInstance {
@@ -88,11 +80,7 @@ func (d dependencies) Prompter() Prompter {
 
 // PrepareInstances makes prepares DB instances for completions and UI.
 func PrepareInstances(instances []DBInstance, options ...func(o *Options)) {
-	instancesEnum = nil
-
 	for i, v := range instances {
-		instancesEnum = append(instancesEnum, v.Name)
-
 		if v.prepared {
 			continue
 		}
@@ -115,7 +103,6 @@ func PrepareInstances(instances []DBInstance, options ...func(o *Options)) {
 // DefaultDeps prepares dependencies from DB instances.
 func DefaultDeps(instances []DBInstance) Deps {
 	deps := &dependencies{
-		form:      jsonform.NewRepository(&jsonschema.Reflector{}),
 		instances: instances,
 	}
 
@@ -157,6 +144,8 @@ func decodeForm(b string) (qr QueryRequest, err error) {
 		return qr, err
 	}
 
+	qr.fold()
+
 	return qr, nil
 }
 
@@ -165,13 +154,16 @@ func DecodeForm(b string) (QueryRequest, error) {
 	return decodeForm(b)
 }
 
+//go:embed console.html
+var consoleHTML string
+
+var consoleTemplate = template.Must(template.New("console").Parse(consoleHTML))
+
 // DBConsole creates use case interactor to show DB console.
 func DBConsole(deps Deps, prefix string, options ...func(*Options)) usecase.Interactor {
 	if !strings.HasSuffix(prefix, "/") {
 		prefix += "/"
 	}
-
-	// PRAGMA table_info(visitor);
 
 	type req struct {
 		Form string `query:"form"`
@@ -183,92 +175,29 @@ func DBConsole(deps Deps, prefix string, options ...func(*Options)) usecase.Inte
 	}
 
 	u := usecase.NewInteractor(func(ctx context.Context, in req, out *response.EmbeddedSetter) error {
-		p := jsonform.Page{}
-
-		p.Title = "DB Console"
-
-		// Rebuilt per request (not cached at Mount time) so a schema refresh from any tab
-		// is visible to every new page load, including ones opened from a shared link.
-		j, err := json.Marshal(buildCompletions(deps, o))
-		if err != nil {
-			return err
-		}
-
-		p.AppendHTMLHead = template.HTML( //nolint:gosec
-			`
-<script src="` + prefix + `ace/ace.min.js"></script>
-<script src="` + prefix + `ace/ext-inline_autocomplete.min.js"></script>
-<script src="` + prefix + `ace/ext-language_tools.min.js"></script>
-
-<link rel="icon" href="` + prefix + `favicon.png" type="image/png"/>
-` + string(plot.HeadTags(plotPrefix(prefix))) + `
-<script src="` + prefix + `uFuzzy.iife.js"></script>
-<script src="` + prefix + `script.js"></script>
-<script src="` + prefix + `script_extra.js"></script>
-<link rel="stylesheet" href="` + prefix + `style.css">
-
-<script>
-completions = ` + string(j) + `
-</script>
-`)
-		p.AppendHTML = `
-<div style="margin: 2em">
-<hr />
-<script>
-renderColumnsDirectory();
-</script>
-
-<div id="download-report" class="btn btn-info" style="display: none" onclick="downloadHTMLReport()">Download results as HTML report</div>
-<a id="link-form" style="display: none" href="#">Link to this form</a>
-<div id="query-results" style="margin-top:2em">
-</div>
-</div>
-`
-
 		qr, err := decodeForm(in.Form)
 		if err != nil {
 			return err
 		}
 
-		if in.Form != "" {
-			p.AppendHTML += `<script>$(function(){$('#schema-form-queries').submit();})</script>`
+		defaultInstance := ""
+		if inst := findInstance(deps, ""); inst != nil {
+			defaultInstance = inst.Name
 		}
 
-		if len(qr.Queries) == 0 {
-			qr.Queries = []dbQuery{{}}
-		}
+		// Completions are rebuilt per request (not cached at Mount time) so a schema refresh from any tab
+		// is visible to every new page load, including ones opened from a shared link.
+		out.ResponseWriter().Header().Set("Content-Type", "text/html; charset=utf-8")
 
-		queriesForm := jsonform.Form{
-			Name:              "queries",
-			Title:             "DB Console",
-			SubmitURL:         prefix + "query-db",
-			SubmitMethod:      http.MethodPost,
-			SubmitText:        "Query",
-			SuccessStatus:     http.StatusOK,
-			Value:             qr,
-			OnSuccess:         `onQuerySQLSuccess`,
-			OnBeforeSubmit:    `onQuerySQLBeforeSubmit`,
-			OnRequestFinished: `onQuerySQLFinished`,
-		}
-
-		askAIForm := jsonform.Form{
-			Name:              "ask-ai",
-			SubmitURL:         prefix + "prompt",
-			SubmitMethod:      http.MethodPost,
-			SubmitText:        "Send",
-			Value:             promptRequest{},
-			OnSuccess:         `onPromptSuccess`,
-			OnBeforeSubmit:    `onPromptBeforeSubmit`,
-			OnRequestFinished: `onPromptFinished`,
-			BeforeForm:        `<div id="columns-directory" class="pure-u-2-5" style="position: absolute"></div><div id="refresh-schema" style="position: absolute;margin-left: 160px" class="btn btn-info" onclick="return refreshSchema();">Refresh Schema</div><div style="position: absolute;margin-left: 320px" class="ai btn btn-info" onclick="return toggleAskAI();">Ask AI 🤖</div>`,
-		}
-
-		if deps.Prompter() == nil {
-			p.AppendHTMLHead += `<style>.ai { display: none }</style>
-`
-		}
-
-		return deps.SchemaRepository().Render(out.ResponseWriter(), p, queriesForm, askAIForm)
+		return consoleTemplate.Execute(out.ResponseWriter(), map[string]any{
+			"Prefix":          prefix,
+			"PlotHead":        template.HTML(plot.HeadTags(plotPrefix(prefix))), //nolint:gosec
+			"Completions":     buildCompletions(deps, o),
+			"DefaultInstance": defaultInstance,
+			"Statement":       qr.Statement,
+			"AutoRun":         in.Form != "",
+			"AI":              deps.Prompter() != nil,
+		})
 	})
 
 	u.SetExpectedErrors(status.Unknown, status.InvalidArgument)

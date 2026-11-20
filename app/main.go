@@ -690,7 +690,7 @@ func loadConfig(value string, cfg *flatjsonl.Config) error {
 
 // withSQL appends a console form with the statement to the URL, the form is executed on open.
 func withSQL(consoleURL, statement string) (string, error) {
-	j, err := json.Marshal(map[string]any{"queries": []map[string]string{{"statement": statement}}})
+	j, err := json.Marshal(map[string]string{"statement": statement})
 	if err != nil {
 		return "", err
 	}
@@ -721,13 +721,7 @@ func printForm(encoded string) error {
 		return fmt.Errorf("decode form: %w", err)
 	}
 
-	for _, q := range qr.Queries {
-		if q.Instance != "" {
-			fmt.Printf("-- instance: %s\n", q.Instance)
-		}
-
-		fmt.Println(q.Statement)
-	}
+	fmt.Println(qr.Statement)
 
 	return nil
 }

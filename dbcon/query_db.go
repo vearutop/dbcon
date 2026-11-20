@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -17,22 +18,56 @@ import (
 	"github.com/swaggest/usecase"
 )
 
-type dbQuery struct {
-	Instance  instance `json:"instance" title:"DB Instance"`
-	Statement string   `json:"statement" formType:"ace" htmlClass:"sql-statement" title:"SQL Statements"`
-}
-
-type instance string
-
-func (i instance) Enum() (res []any) {
-	return instancesEnum
-}
-
-var instancesEnum []any
-
-// QueryRequest is a list of queries.
+// QueryRequest is a script of SQL statements.
+//
+// Statements run on the first DB instance unless switched with an `-- instance:name` comment,
+// which applies to its statement and the following ones, until the next such comment.
 type QueryRequest struct {
-	Queries []dbQuery `json:"queries" title:"Queries" description:"SQL statements to execute."`
+	Statement string `json:"statement" description:"SQL statements to execute, separated with semicolon."`
+
+	// Queries is the legacy (per-instance textareas) form state, folded into Statement on decoding.
+	Queries []legacyQuery `json:"queries,omitempty" deprecated:"true"`
+}
+
+type legacyQuery struct {
+	Instance  string `json:"instance"`
+	Statement string `json:"statement"`
+}
+
+// fold converts legacy form state into a single script.
+func (q *QueryRequest) fold() {
+	for _, l := range q.Queries {
+		if q.Statement != "" {
+			q.Statement += "\n\n"
+		}
+
+		if l.Instance != "" {
+			q.Statement += "-- instance:" + l.Instance + "\n"
+		}
+
+		q.Statement += l.Statement
+	}
+
+	q.Queries = nil
+}
+
+var instanceDirective = regexp.MustCompile(`(?m)^[ \t]*--[ \t]*instance:[ \t]*(\S.*?)[ \t]*$`)
+
+// findInstance returns an instance by name, or the first one for empty name.
+func findInstance(deps Deps, name string) *DBInstance {
+	instances := deps.DBInstances()
+
+	if name == "" && len(instances) > 0 {
+		return &instances[0]
+	}
+
+	for i, v := range instances {
+		if v.Name == name {
+			return &instances[i]
+		}
+	}
+
+	return nil
 }
 
 // Result is an SQL statement query result.
@@ -61,13 +96,8 @@ func DBQuery(deps Deps, options ...func(*Options)) usecase.Interactor {
 	}
 
 	u := usecase.NewInteractor(func(ctx context.Context, input QueryRequest, output *Response) error {
-		var results []Result
-
-		for _, q := range input.Queries {
-			results = queryInstance(ctx, deps, q, results, o)
-		}
-
-		output.Results = results
+		input.fold()
+		output.Results = queryScript(ctx, deps, input.Statement, o)
 
 		j, err := json.Marshal(input)
 		if err != nil {
@@ -93,40 +123,34 @@ func DBQuery(deps Deps, options ...func(*Options)) usecase.Interactor {
 	return u
 }
 
-func queryInstance(ctx context.Context, deps Deps, query dbQuery, results []Result, o Options) []Result {
-	var inst *DBInstance
-
-	for i, v := range deps.DBInstances() {
-		if v.Name == string(query.Instance) {
-			inst = &deps.DBInstances()[i]
-
-			break
-		}
-	}
-
-	if inst == nil {
-		result := Result{
-			Instance: string(query.Instance),
-			Error:    fmt.Sprintf("unknown instance: %s", query.Instance),
-		}
-		results = append(results, result)
-
-		return results
-	}
-
-	script, err := expandTemplateVariables(query.Statement)
+// queryScript runs statements of a script, switching instances with `-- instance:name` comments.
+func queryScript(ctx context.Context, deps Deps, script string, o Options) (results []Result) {
+	expanded, err := expandTemplateVariables(script)
 	if err != nil {
-		return append(results, Result{Instance: string(query.Instance), Statement: query.Statement, Error: err.Error()})
+		return []Result{{Statement: script, Error: err.Error()}}
 	}
 
-	for _, statement := range SplitStatements(script) {
-		if result, ok := tryCSVImport(ctx, inst.Instance, inst.Dialect, string(query.Instance), statement); ok {
+	name := ""
+
+	for _, statement := range SplitStatements(expanded) {
+		if m := instanceDirective.FindStringSubmatch(statement); m != nil {
+			name = m[1]
+		}
+
+		inst := findInstance(deps, name)
+		if inst == nil {
+			results = append(results, Result{Instance: name, Statement: statement, Error: "unknown instance: " + name})
+
+			continue
+		}
+
+		if result, ok := tryCSVImport(ctx, inst.Instance, inst.Dialect, inst.Name, statement); ok {
 			results = append(results, result)
 
 			continue
 		}
 
-		results = append(results, makeResult(ctx, inst.Instance, string(query.Instance), statement, o))
+		results = append(results, makeResult(ctx, inst.Instance, inst.Name, statement, o))
 	}
 
 	return results

@@ -43,5 +43,5 @@ func TestWithSQL(t *testing.T) {
 
 	j, err := io.ReadAll(brotli.NewReader(bytes.NewReader(b)))
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"queries":[{"statement":"select 1; -- ü"}]}`, string(j))
+	assert.JSONEq(t, `{"statement":"select 1; -- ü"}`, string(j))
 }

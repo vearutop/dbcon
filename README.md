@@ -82,6 +82,10 @@ The console is served under a random URL path prefix (for example `http://127.0.
 
 Multiple statements can be separated with `;`.
 
+With several databases (`dbcon a.sqlite b.sqlite`), statements run on the first one by default. A standalone
+`-- instance:b.sqlite` comment (available in completions) switches the instance for its statement and all following
+ones, until the next `-- instance:` comment.
+
 Define template variables with a standalone `-- set:$name=value` comment:
 
 ```sql

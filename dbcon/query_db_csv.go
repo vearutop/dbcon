@@ -3,7 +3,6 @@ package dbcon
 
 import (
 	"context"
-	"database/sql"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -17,22 +16,13 @@ import (
 // DBQueryCSV returns query result as CSV.
 func DBQueryCSV(deps Deps, options ...func(*Options)) usecase.Interactor {
 	type request struct {
-		Instance  instance `query:"instance"`
+		Instance  string `query:"instance" description:"Instance name, the first one if empty."`
 		Statement string   `query:"statement" formType:"textarea" title:"Statement" description:"SQL Statement to execute."`
 	}
 
 	u := usecase.NewInteractor(func(ctx context.Context, input request, output *response.EmbeddedSetter) error {
-		var db *sql.DB
-
-		for _, v := range deps.DBInstances() {
-			if v.Name == string(input.Instance) {
-				db = v.Instance
-
-				break
-			}
-		}
-
-		if db == nil {
+		inst := findInstance(deps, input.Instance)
+		if inst == nil {
 			return status.Wrap(fmt.Errorf("unknown instance: %s", input.Instance), status.NotFound)
 		}
 
@@ -42,7 +32,7 @@ func DBQueryCSV(deps Deps, options ...func(*Options)) usecase.Interactor {
 			opt(&o)
 		}
 
-		res := makeResult(ctx, db, string(input.Instance), input.Statement, o)
+		res := makeResult(ctx, inst.Instance, inst.Name, input.Statement, o)
 
 		if res.Error != "" {
 			return errors.New(res.Error)
