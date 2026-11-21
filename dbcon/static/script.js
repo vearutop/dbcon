@@ -55,10 +55,21 @@ function renderResult(result, idx) {
         return
     }
 
+    let plotOpts = plotDirectiveOpts(result.statement)
+
+    // A pie needs at least 2 rows to mean anything; fall back to a table otherwise.
+    if (plotOpts && plotOpts.kind === 'pie' && (!result.values || result.values.length <= 1)) {
+        plotOpts = null
+    }
+
     var rowsCnt = 0
     if (result.values && !strip) {
-        if (!isPortableReport) {
-            res += '<a href="query-db.csv?instance=' + encodeURIComponent(result.instance) + '&statement=' + encodeURIComponent(result.statement) + '" style="margin-bottom: 10px" class="btn btn-info" target="_blank">Download CSV</a> '
+        res += '<a href="#" onclick="return downloadCSV(' + idx + ')" style="margin-bottom: 10px" class="btn btn-info">Download CSV</a> '
+
+        // Only a table can be copied as a table, not a plot.
+        if (!plotOpts && result.columns && result.columns.length && result.values.length) {
+            res += '<a href="#" onclick="return copyTable(this)" style="margin-bottom: 10px" class="btn btn-info">Copy</a> ' +
+                '<a href="#" onclick="return copyTable(this, true)" style="margin-bottom: 10px" class="btn btn-info">Copy as Markdown</a> '
         }
 
         rowsCnt = result.values.length
@@ -67,15 +78,8 @@ function renderResult(result, idx) {
         res += '<span>Rows: ' + rowsCnt + ', elapsed: ' + result.elapsed + '</span>\n'
     }
 
-    let plotOpts = plotDirectiveOpts(result.statement)
-
     if (result.histogram) {
         res += renderHistogramPercentiles(result.histogram, plotOpts && plotOpts.value && plotOpts.value.unit === 's' ? formatSeconds : Number)
-    }
-
-    // A pie needs at least 2 rows to mean anything; fall back to a table otherwise.
-    if (plotOpts && plotOpts.kind === 'pie' && (!result.values || result.values.length <= 1)) {
-        plotOpts = null
     }
 
     if (plotOpts && result.histogram && result.histogram.heatmap) {
@@ -124,6 +128,99 @@ function renderResult(result, idx) {
     }
 
     $('#query-results').append('<div>' + res + '</div>')
+}
+
+/**
+ * Downloads the result as CSV, straight from the data already shown, without querying again.
+ * @param {Number} idx
+ */
+function downloadCSV(idx) {
+    const result = results[idx]
+    const cell = v => {
+        if (v === null || v === undefined) return ''
+        const s = typeof v === 'string' ? v : JSON.stringify(v)
+
+        return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
+    }
+
+    const lines = [result.columns.map(cell).join(',')]
+    for (const row of result.values || []) {
+        lines.push(row.map(cell).join(','))
+    }
+
+    download_file('result-' + (Number(idx) + 1) + '.csv', lines.join('\n') + '\n', 'text/csv')
+
+    return false
+}
+
+/**
+ * Exports the table next to the button as it is shown (current sorting and search filter),
+ * without the search row and sorting links.
+ * @param {Element} btn
+ * @returns {{html: string, tsv: string, md: string}}
+ */
+function tableExport(btn) {
+    const table = btn.closest('div').querySelector('table.result')
+    const head = [...table.querySelectorAll('thead tr:first-child th')].map(th => th.textContent.trim())
+    const rows = [...table.querySelectorAll('tbody tr')]
+        .filter(tr => tr.style.display !== 'none')
+        .map(tr => [...tr.children])
+
+    const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const flat = s => s.replace(/\s*[\t\r\n]+\s*/g, ' ').trim()
+    const md = s => s.trim().replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>')
+
+    return {
+        html: '<table><thead><tr>' + head.map(h => '<th>' + esc(h) + '</th>').join('') + '</tr></thead><tbody>' +
+            rows.map(r => '<tr>' + r.map(td => '<td>' + td.innerHTML + '</td>').join('') + '</tr>').join('') +
+            '</tbody></table>',
+        tsv: [head].concat(rows.map(r => r.map(td => td.textContent))).map(r => r.map(flat).join('\t')).join('\n') + '\n',
+        md: '| ' + head.map(md).join(' | ') + ' |\n| ' + head.map(() => '---').join(' | ') + ' |\n' +
+            rows.map(r => '| ' + r.map(td => md(td.textContent)).join(' | ') + ' |\n').join(''),
+    }
+}
+
+/**
+ * Copies the table to clipboard: as a rich table with TSV fallback (pastes into spreadsheets and documents),
+ * or as Markdown text.
+ * @param {Element} btn
+ * @param {Boolean} markdown
+ */
+function copyTable(btn, markdown) {
+    const t = tableExport(btn)
+    const data = markdown ? {'text/plain': t.md} : {'text/html': t.html, 'text/plain': t.tsv}
+
+    // The copy event works without secure context, unlike navigator.clipboard.
+    const onCopy = e => {
+        for (const type in data) e.clipboardData.setData(type, data[type])
+        e.preventDefault()
+    }
+    document.addEventListener('copy', onCopy)
+    const ta = document.createElement('textarea')
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    ta.remove()
+    document.removeEventListener('copy', onCopy)
+
+    const label = btn.textContent
+    btn.textContent = ok ? 'Copied ✓' : 'Copy failed'
+    setTimeout(() => btn.textContent = label, 1500)
+
+    return false
+}
+
+function download_file(name, contents, mime_type) {
+    const dlink = document.createElement('a')
+    dlink.download = name
+    dlink.href = window.URL.createObjectURL(new Blob([contents], {type: mime_type || 'text/plain'}))
+    dlink.click()
+
+    // revokeObjectURL needs a delay to work properly
+    setTimeout(function () {
+        window.URL.revokeObjectURL(dlink.href)
+    }, 1500)
+    dlink.remove()
 }
 
 /**
