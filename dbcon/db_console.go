@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	_ "embed"
 	"encoding/base64"
 	"encoding/json"
-	_ "embed"
 	"html/template"
 	"io"
 	"os"
@@ -78,6 +78,20 @@ func (d dependencies) Prompter() Prompter {
 	return d.prompter
 }
 
+// loadCompletions reads schema of the instance, adds keywords and functions.
+func (v DBInstance) loadCompletions(options ...func(o *Options)) (cmp []SQLCompletion, promptBase string) {
+	switch v.Dialect { //nolint:exhaustive
+	case sqluct.DialectSQLite3:
+		return SqliteCompletions(v.Instance, options...)
+	case sqluct.DialectPostgres:
+		return PostgresCompletions(v.Instance, options...)
+	case sqluct.DialectMySQL:
+		return MySQLCompletions(v.Instance, options...)
+	}
+
+	return nil, ""
+}
+
 // PrepareInstances makes prepares DB instances for completions and UI.
 func PrepareInstances(instances []DBInstance, options ...func(o *Options)) {
 	for i, v := range instances {
@@ -85,16 +99,9 @@ func PrepareInstances(instances []DBInstance, options ...func(o *Options)) {
 			continue
 		}
 
-		switch v.Dialect { //nolint:exhaustive
-		case sqluct.DialectSQLite3:
-			cmp, promptBase := SqliteCompletions(v.Instance, options...)
-			v.Completions = append(v.Completions, cmp...)
-			v.PromptBase = promptBase
-		case sqluct.DialectPostgres:
-			cmp, promptBase := PostgresCompletions(v.Instance, options...)
-			v.Completions = append(v.Completions, cmp...)
-			v.PromptBase = promptBase
-		}
+		cmp, promptBase := v.loadCompletions(options...)
+		v.Completions = append(v.Completions, cmp...)
+		v.PromptBase = promptBase
 
 		instances[i] = v
 	}

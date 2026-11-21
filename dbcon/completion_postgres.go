@@ -93,11 +93,7 @@ func PostgresCompletions(db *sql.DB, options ...func(o *Options)) (_ []SQLComple
 		createTables += createTable + "\n"
 	}
 
-	completions = addCompletionsFromStringList(strings.ToUpper(`select|insert|update|delete|from|where|and|or|group|by|order|limit|offset|having|as|case|when|then|else|end|type|left|right|join|on|outer|desc|asc|union|create|table|primary|key|if|foreign|not|references|default|null|inner|cross|natural|database|drop|grant|distinct|is|in|all|alter|any|array|at|authorization|between|both|cast|check|collate|column|commit|constraint|cube|current|current_date|current_time|current_timestamp|current_user|describe|escape|except|exists|external|extract|fetch|filter|for|full|function|global|grouping|intersect|interval|into|leading|like|local|no|of|only|out|overlaps|partition|position|range|revoke|rollback|rollup|row|rows|session_user|set|some|start|tablesample|time|to|trailing|truncate|unique|unknown|user|using|values|window|with`),
-		"|", "keyword", completions)
-
-	completions = addCompletionsFromStringList(strings.ToUpper(`avg|count|first|last|max|min|sum|ucase|lcase|mid|len|round|rank|now|format|coalesce|ifnull|isnull|nvl`),
-		"|", "function", completions)
+	completions = addGenericCompletions(completions)
 
 	promptBase = "Given the following Postgres database schema, answer my next question with SQL statement, " +
 		"only use columns defined in the schema:\n " + createTables + "\n\n"

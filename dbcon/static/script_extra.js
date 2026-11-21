@@ -127,6 +127,74 @@ function instanceAt(text) {
     return name
 }
 
+var schemas = {}
+
+/** Schema of an instance for the contextual completer, rebuilt when completions are refreshed. */
+function schemaFor(name) {
+    var src = completions[name] || []
+    var c = schemas[name]
+    if (!c || c.src !== src) {
+        c = schemas[name] = {src: src, schema: SQLComplete.buildSchema(src)}
+    }
+
+    return c.schema
+}
+
+function suggestAt(editor, pos, prefixOnly) {
+    var text = editor.getValue()
+    var offset = editor.session.doc.positionToIndex(pos)
+
+    return SQLComplete.suggest(text, offset, schemaFor(instanceAt(text.slice(0, offset))), prefixOnly)
+}
+
+var uf
+
+/** Replaces Ace prefix detection and filtering (plain subsequence match) with the contextual ones. */
+function patchAce(editor) {
+    var ac = ace.require('ace/autocomplete')
+    if (ac.FilteredList.$patched) {
+        return
+    }
+    ac.FilteredList.$patched = true
+
+    ace.require('ace/autocomplete/util').getCompletionPrefix = function (editor) {
+        return suggestAt(editor, editor.getCursorPosition(), true).prefix
+    }
+
+    // uFuzzy ranks word-boundary and out-of-order matches (`tracker click`), good for wide tables derived from JSON.
+    // Falls back to Ace subsequence matching (`ctr`) when uFuzzy finds nothing.
+    var orig = ac.FilteredList.prototype.filterCompletions
+    ac.FilteredList.prototype.filterCompletions = function (items, needle) {
+        var n = needle.replace(/^[`"]/, '')
+        if (!n || typeof uFuzzy === 'undefined') {
+            return orig.call(this, items, needle)
+        }
+
+        uf = uf || new uFuzzy({})
+        var hay = items.map(function (it) {
+            var c = it.caption || it.value || it.snippet || ''
+            return /^[`"]/.test(c) ? c.slice(1) : c
+        })
+        var r = uf.search(hay, n, 1, 10000)
+        var idxs = r[0], order = r[2]
+        if (!idxs || !idxs.length) {
+            return orig.call(this, items, needle)
+        }
+
+        // Candidate score is its relevance for the context, matching quality only orders within the same score band.
+        var res = []
+        for (var k = 0; k < idxs.length; k++) {
+            var it = items[idxs[order ? order[k] : k]]
+            it.matchMask = 0
+            it.exactMatch = 0
+            it.$score = (it.score || 0) + 900 * (1 - k / idxs.length)
+            res.push(it)
+        }
+
+        return res
+    }
+}
+
 function initEditor() {
     editor = ace.edit('editor')
     editor.setTheme()
@@ -140,12 +208,22 @@ function initEditor() {
         editor.resize()
     }).observe(document.getElementById('editor'))
 
-    // Completions depend on the instance selected by the closest preceding `-- instance:` comment.
+    patchAce(editor)
+
+    // Candidates depend on the instance selected by the closest preceding `-- instance:` comment,
+    // and on the clause and tables in scope at the cursor.
     editor.completers = [{
         getCompletions: function (editor, session, pos, prefix, callback) {
-            callback(null, completions[instanceAt(session.getTextRange({start: {row: 0, column: 0}, end: pos}))] || [])
+            callback(null, suggestAt(editor, pos).items)
         }
     }]
+
+    // Offer columns right after `alias.`
+    editor.commands.on('afterExec', function (e) {
+        if (e.command.name === 'insertstring' && e.args === '.') {
+            editor.execCommand('startAutocomplete')
+        }
+    })
 
     editor.session.setMode("ace/mode/sql")
 }

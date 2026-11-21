@@ -14,6 +14,7 @@
     <script src="{{.Prefix}}ace/ext-language_tools.min.js"></script>
     {{.PlotHead}}
     <script src="{{.Prefix}}uFuzzy.iife.js"></script>
+    <script src="{{.Prefix}}completer.js"></script>
     <script src="{{.Prefix}}script.js"></script>
     <script src="{{.Prefix}}script_extra.js"></script>
     {{if not .AI}}<style>.ai { display: none }</style>{{end}}
@@ -38,7 +39,7 @@
 
 <div style="padding: 0 2em">
     <form id="query-form" class="pure-form" onsubmit="return runQuery();">
-        <label for="editor">Queries</label>
+        <label for="editor">Queries</label> <small class="text-muted">Use alt+space or opt+space to trigger completion</small>
         <div id="editor">{{.Statement}}</div>
         <button type="submit" class="btn btn-primary">Query</button>
         <div id="query-status" class="alert" style="display: none"></div>

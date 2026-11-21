@@ -12,7 +12,7 @@ import (
 
 type promptRequest struct {
 	Instance string `json:"instance,omitempty" description:"Instance name, the first one if empty."`
-	Question string   `json:"question" formType:"textarea" title:"Question" description:"Ask question about data in natural language, receive SQL statement."`
+	Question string `json:"question" formType:"textarea" title:"Question" description:"Ask question about data in natural language, receive SQL statement."`
 }
 
 // Prompt creates usecase interactor to prompt LLM about SQL.

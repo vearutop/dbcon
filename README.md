@@ -86,6 +86,11 @@ With several databases (`dbcon a.sqlite b.sqlite`), statements run on the first 
 `-- instance:b.sqlite` comment (available in completions) switches the instance for its statement and all following
 ones, until the next `-- instance:` comment.
 
+The editor completes SQL in context (SQLite, Postgres, MySQL): tables after `FROM`/`JOIN`, columns of the tables
+in scope (aliases, CTEs and derived tables included) elsewhere, columns of an alias after `alias.`, qualified names
+where a column is ambiguous, and `-- ` directives in comments. Matching is fuzzy, so a fragment of a long name
+(`click.Track`, `ctr`) finds `.context.click.CallbackData.Tracker`.
+
 Define template variables with a standalone `-- set:$name=value` comment:
 
 ```sql

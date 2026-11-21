@@ -3,7 +3,6 @@ package dbcon
 import (
 	"context"
 
-	"github.com/bool64/sqluct"
 	"github.com/swaggest/usecase"
 )
 
@@ -98,17 +97,7 @@ func RefreshSchema(deps Deps, options ...func(*Options)) usecase.Interactor {
 				continue
 			}
 
-			var (
-				cmp        []SQLCompletion
-				promptBase string
-			)
-
-			switch v.Dialect { //nolint:exhaustive
-			case sqluct.DialectSQLite3:
-				cmp, promptBase = SqliteCompletions(v.Instance, options...) //nolint:contextcheck // no context parameter available
-			case sqluct.DialectPostgres:
-				cmp, promptBase = PostgresCompletions(v.Instance, options...) //nolint:contextcheck // no context parameter available
-			}
+			cmp, promptBase := v.loadCompletions(options...) //nolint:contextcheck // no context parameter available
 
 			instances[i].Completions = cmp
 			instances[i].PromptBase = promptBase

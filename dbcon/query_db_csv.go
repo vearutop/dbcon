@@ -17,7 +17,7 @@ import (
 func DBQueryCSV(deps Deps, options ...func(*Options)) usecase.Interactor {
 	type request struct {
 		Instance  string `query:"instance" description:"Instance name, the first one if empty."`
-		Statement string   `query:"statement" formType:"textarea" title:"Statement" description:"SQL Statement to execute."`
+		Statement string `query:"statement" formType:"textarea" title:"Statement" description:"SQL Statement to execute."`
 	}
 
 	u := usecase.NewInteractor(func(ctx context.Context, input request, output *response.EmbeddedSetter) error {
