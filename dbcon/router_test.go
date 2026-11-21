@@ -37,7 +37,7 @@ func TestHandler_prefix(t *testing.T) {
 	}
 
 	// And nothing without it.
-	for _, path := range []string{"/", "/db.html", "/script.js", "/plot/plot.js", "/jquery-3.7.1.min.js", "/query-db.csv"} {
+	for _, path := range []string{"/", "/db.html", "/script.js", "/plot/plot.js", "/jquery-3.7.1.min.js"} {
 		assert.Equal(t, http.StatusNotFound, do(http.MethodGet, path), path)
 	}
 

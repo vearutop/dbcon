@@ -57,9 +57,7 @@ function renderResult(result, idx) {
 
     var rowsCnt = 0
     if (result.values && !strip) {
-        if (!isPortableReport) {
-            res += '<a href="query-db.csv?instance=' + encodeURIComponent(result.instance) + '&statement=' + encodeURIComponent(result.statement) + '" style="margin-bottom: 10px" class="btn btn-info" target="_blank">Download CSV</a> '
-        }
+        res += '<a href="#" onclick="return downloadCSV(' + idx + ')" style="margin-bottom: 10px" class="btn btn-info">Download CSV</a> '
 
         rowsCnt = result.values.length
     }
@@ -124,6 +122,42 @@ function renderResult(result, idx) {
     }
 
     $('#query-results').append('<div>' + res + '</div>')
+}
+
+/**
+ * Downloads the result as CSV, straight from the data already shown, without querying again.
+ * @param {Number} idx
+ */
+function downloadCSV(idx) {
+    const result = results[idx]
+    const cell = v => {
+        if (v === null || v === undefined) return ''
+        const s = typeof v === 'string' ? v : JSON.stringify(v)
+
+        return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
+    }
+
+    const lines = [result.columns.map(cell).join(',')]
+    for (const row of result.values || []) {
+        lines.push(row.map(cell).join(','))
+    }
+
+    download_file('result-' + (Number(idx) + 1) + '.csv', lines.join('\n') + '\n', 'text/csv')
+
+    return false
+}
+
+function download_file(name, contents, mime_type) {
+    const dlink = document.createElement('a')
+    dlink.download = name
+    dlink.href = window.URL.createObjectURL(new Blob([contents], {type: mime_type || 'text/plain'}))
+    dlink.click()
+
+    // revokeObjectURL needs a delay to work properly
+    setTimeout(function () {
+        window.URL.revokeObjectURL(dlink.href)
+    }, 1500)
+    dlink.remove()
 }
 
 /**

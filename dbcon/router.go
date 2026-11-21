@@ -1,3 +1,4 @@
+// Package dbcon provides HTTP API.
 package dbcon
 
 import (
@@ -33,7 +34,6 @@ func Mount(s *web.Service, prefix string, deps Deps, options ...func(*Options)) 
 	s.Get(prefix, DBConsole(deps, prefix, options...))
 	s.Get(prefix+"db.html", DBConsole(deps, prefix, options...))
 	s.Post(prefix+"query-db", DBQuery(deps, options...))
-	s.Get(prefix+"query-db.csv", DBQueryCSV(deps, options...))
 	s.Post(prefix+"prompt", Prompt(deps))
 	s.Post(prefix+"refresh-schema", RefreshSchema(deps, options...))
 
