@@ -198,7 +198,7 @@ func DBConsole(deps Deps, prefix string, options ...func(*Options)) usecase.Inte
 
 		return consoleTemplate.Execute(out.ResponseWriter(), map[string]any{
 			"Prefix":          prefix,
-			"PlotHead":        template.HTML(plot.HeadTags(plotPrefix(prefix))), //nolint:gosec
+			"PlotHead":        plot.HeadTags(plotPrefix(prefix)),
 			"Completions":     buildCompletions(deps, o),
 			"DefaultInstance": defaultInstance,
 			"Statement":       qr.Statement,

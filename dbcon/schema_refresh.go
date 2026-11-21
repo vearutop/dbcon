@@ -55,6 +55,7 @@ func staticCompletions(o Options) []SQLCompletion {
 // buildCompletions merges each instance's schema completions with the static ones.
 func buildCompletions(deps Deps, o Options) map[string][]SQLCompletion {
 	static := staticCompletions(o)
+
 	if len(deps.DBInstances()) > 1 {
 		for _, v := range deps.DBInstances() {
 			static = append(static, SQLCompletion{Value: "-- instance:" + v.Name, Score: 1000, Meta: "run following statements on this DB instance"})
