@@ -317,7 +317,7 @@ func TestMakeResult_Histogram(t *testing.T) {
 
 	// Template loops can create a separate histogram for each selected expression.
 	deps := dependencies{instances: []DBInstance{{Name: "test", Instance: db}}}
-	results := queryInstance(ctx, deps, dbQuery{Instance: "test", Statement: "-- for:$col in length(url), length(url) * 2\n-- histogram\n-- plot:stacked_bars\nSELECT 1, $col FROM log;\n-- endfor"}, nil, Options{})
+	results := queryScript(ctx, deps, "-- for:$col in length(url), length(url) * 2\n-- histogram\n-- plot:stacked_bars\nSELECT 1, $col FROM log;\n-- endfor", Options{})
 	require.Len(t, results, 2)
 
 	for _, result := range results {

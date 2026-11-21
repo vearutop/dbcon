@@ -12,8 +12,6 @@ require (
 	github.com/lib/pq v1.12.0
 	github.com/stretchr/testify v1.12.1
 	github.com/swaggest/assertjson v1.10.0
-	github.com/swaggest/jsonform-go v0.2.7
-	github.com/swaggest/jsonschema-go v0.3.79
 	github.com/swaggest/openapi-go v0.2.60
 	github.com/swaggest/rest v0.2.75
 	github.com/swaggest/swgui v1.8.5
@@ -63,6 +61,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v3 v3.1.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/swaggest/form/v5 v5.1.1 // indirect
+	github.com/swaggest/jsonschema-go v0.3.79 // indirect
 	github.com/swaggest/refl v1.4.0 // indirect
 	github.com/vearutop/fastjson v1.0.0 // indirect
 	github.com/yosuke-furukawa/json5 v0.1.2-0.20201207051438-cf7bb3f354ff // indirect

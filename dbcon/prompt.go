@@ -11,8 +11,8 @@ import (
 )
 
 type promptRequest struct {
-	Instance instance `json:"instance" title:"DB Instance"`
-	Question string   `json:"question" formType:"textarea" title:"Question" description:"Ask question about data in natural language, receive SQL statement."`
+	Instance string `json:"instance,omitempty" description:"Instance name, the first one if empty."`
+	Question string `json:"question" formType:"textarea" title:"Question" description:"Ask question about data in natural language, receive SQL statement."`
 }
 
 // Prompt creates usecase interactor to prompt LLM about SQL.
@@ -31,11 +31,8 @@ func Prompt(deps Deps) usecase.Interactor {
 		}
 
 		promptBase := ""
-
-		for _, ins := range deps.DBInstances() {
-			if ins.Name == string(input.Instance) {
-				promptBase = ins.PromptBase
-			}
+		if ins := findInstance(deps, input.Instance); ins != nil {
+			promptBase = ins.PromptBase
 		}
 
 		if promptBase == "" {

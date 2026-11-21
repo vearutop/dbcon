@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>DB Console</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="{{.Prefix}}favicon.png" type="image/png"/>
+    <link rel="stylesheet" type="text/css" href="{{.Prefix}}bootstrap.css"/>
+    <link rel="stylesheet" href="{{.Prefix}}pure.css">
+    <link rel="stylesheet" href="{{.Prefix}}style.css">
+    <script src="{{.Prefix}}jquery-3.7.1.min.js"></script>
+    <script src="{{.Prefix}}ace/ace.min.js"></script>
+    <script src="{{.Prefix}}ace/ext-inline_autocomplete.min.js"></script>
+    <script src="{{.Prefix}}ace/ext-language_tools.min.js"></script>
+    {{.PlotHead}}
+    <script src="{{.Prefix}}uFuzzy.iife.js"></script>
+    <script src="{{.Prefix}}completer.js"></script>
+    <script src="{{.Prefix}}script.js"></script>
+    <script src="{{.Prefix}}script_extra.js"></script>
+    {{if not .AI}}<style>.ai { display: none }</style>{{end}}
+    <script>
+        completions = {{.Completions}}
+        defaultInstance = {{.DefaultInstance}}
+    </script>
+</head>
+<body>
+<div id="header">
+    <h1>DB Console</h1>
+    <div id="columns-directory"></div>
+    <div id="refresh-schema" class="btn btn-info" onclick="return refreshSchema();">Refresh Schema</div>
+    <div class="ai btn btn-info" onclick="return toggleAskAI();">Ask AI 🤖</div>
+
+    <form id="ask-ai" class="overlay pure-form" style="display: none" onsubmit="return sendPrompt();">
+        <textarea id="ask-ai-question" placeholder="Ask a question about data in natural language, receive an SQL statement."></textarea>
+        <button type="submit" class="btn btn-primary">Send</button>
+        <div id="ask-ai-result" class="alert" style="display: none"></div>
+    </form>
+</div>
+
+<div style="padding: 0 2em">
+    <form id="query-form" class="pure-form" onsubmit="return runQuery();">
+        <label for="editor">Queries</label> <small class="text-muted">Use alt+space or opt+space to trigger completion</small>
+        <div id="editor">{{.Statement}}</div>
+        <button type="submit" class="btn btn-primary">Query</button>
+        <div id="query-status" class="alert" style="display: none"></div>
+    </form>
+</div>
+
+<div style="margin: 2em">
+    <hr/>
+    <div id="download-report" class="btn btn-info" style="display: none" onclick="downloadHTMLReport()">Download results as HTML report</div>
+    <a id="link-form" style="display: none" href="#">Link to this form</a>
+    <div id="query-results" style="margin-top: 2em"></div>
+</div>
+<script>
+    initEditor();
+    renderColumnsDirectory();
+    {{if .AutoRun}}runQuery();{{end}}
+</script>
+</body>
+</html>

@@ -46,28 +46,53 @@
     dominant-baseline: middle;
 }
 
-.sql-statement .controls>div {
-    height: auto !important;
-}
-
-.sql-statement .ace_editor {
+#editor {
+    width: 100%;
+    height: 300px;
+    margin-bottom: 10px;
     border: 1px solid #ddd;
     resize: both;
 }
 
-#form-container-ask-ai {
-    visibility: hidden;
-    padding-top: 20px !important;
+#header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 2em 2em 0;
+    margin-bottom: 15px;
 }
 
-#form-container-ask-ai.visible {
-    visibility: visible;
+#header h1 {
+    margin: 0 30px 0 0;
+}
+
+/* Togglable panels float over the page, without moving the query form and results. */
+.overlay {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 2em;
+    z-index: 5;
+    max-width: calc(100% - 4em);
+    max-height: 70vh;
+    overflow: auto;
+    padding: 10px;
+    background: #fff;
+    border: 1px solid #ddd;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
+}
+
+#ask-ai {
+    width: 600px;
+}
+
+#ask-ai textarea {
+    width: 100%;
+    height: 8em;
+    box-sizing: border-box;
+    margin-bottom: 10px;
 }
 
 .ace_editor.ace_autocomplete {
     width: 1000px !important;
-}
-
-#schema-form-queries ul {
-    padding-left: 10px;
 }

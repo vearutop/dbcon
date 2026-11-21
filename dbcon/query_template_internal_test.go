@@ -61,14 +61,14 @@ func TestQueryInstance_TemplateVariables(t *testing.T) {
 	require.NoError(t, err)
 
 	deps := dependencies{instances: []DBInstance{{Name: "test", Instance: db}}}
-	query := dbQuery{Instance: "test", Statement: `-- set:$tableName=be_enriched
+	query := `-- set:$tableName=be_enriched
 SELECT count(DISTINCT tracker) FROM $tableName;
 -- plot:pie
 SELECT count(1), app FROM $tableName GROUP BY app ORDER BY app;
 -- set:$tableName=(SELECT 1)
 SELECT count(1) FROM $tableName;
--- set:$unused=ignored`}
-	results := queryInstance(ctx, deps, query, nil, Options{})
+-- set:$unused=ignored`
+	results := queryScript(ctx, deps, query, Options{})
 	require.Len(t, results, 3)
 
 	for _, result := range results {
@@ -82,7 +82,7 @@ SELECT count(1) FROM $tableName;
 	assert.Equal(t, [][]any{{"1"}}, results[2].Values)
 
 	// A separate execution must not inherit variables from the previous script.
-	results = queryInstance(ctx, deps, dbQuery{Instance: "test", Statement: "SELECT '$tableName'"}, nil, Options{})
+	results = queryScript(ctx, deps, "SELECT '$tableName'", Options{})
 	require.Len(t, results, 1)
 	require.Empty(t, results[0].Error)
 	assert.Equal(t, [][]any{{"$tableName"}}, results[0].Values)
@@ -180,7 +180,7 @@ func TestQueryInstance_TemplateLoops(t *testing.T) {
 
 	deps := dependencies{instances: []DBInstance{{Name: "test", Instance: db}}}
 
-	results := queryInstance(ctx, deps, dbQuery{Instance: "test", Statement: `-- set:$table=clicks
+	results := queryScript(ctx, deps, `-- set:$table=clicks
 -- for:$column in
 -- item:app
 -- item:browser
@@ -188,7 +188,7 @@ func TestQueryInstance_TemplateLoops(t *testing.T) {
 -- plot:caption=$column
 SELECT count(1), $column FROM $table GROUP BY $column ORDER BY $column;
 SELECT count(DISTINCT $column) FROM $table;
--- endfor`}, nil, Options{})
+-- endfor`, Options{})
 	require.Len(t, results, 4)
 
 	for _, result := range results {
@@ -204,7 +204,7 @@ SELECT count(DISTINCT $column) FROM $table;
 	assert.Equal(t, [][]any{{"2"}}, results[3].Values)
 
 	// Invalid templates must fail before even the first SQL statement executes.
-	results = queryInstance(ctx, deps, dbQuery{Instance: "test", Statement: "INSERT INTO clicks VALUES ('c', 'z');\n-- for:$x in 1"}, nil, Options{})
+	results = queryScript(ctx, deps, "INSERT INTO clicks VALUES ('c', 'z');\n-- for:$x in 1", Options{})
 	require.Len(t, results, 1)
 	require.Contains(t, results[0].Error, "missing endfor")
 
@@ -212,4 +212,28 @@ SELECT count(DISTINCT $column) FROM $table;
 
 	require.NoError(t, db.QueryRowContext(ctx, "SELECT count(1) FROM clicks").Scan(&count))
 	assert.Equal(t, 3, count)
+}
+
+func TestQueryScript_InstanceDirective(t *testing.T) {
+	open := func(v string) *sql.DB {
+		db, err := sql.Open("sqlite", ":memory:")
+		require.NoError(t, err)
+		db.SetMaxOpenConns(1)
+		_, err = db.Exec("CREATE TABLE t (v TEXT); INSERT INTO t VALUES ('" + v + "')")
+		require.NoError(t, err)
+
+		return db
+	}
+
+	deps := dependencies{instances: []DBInstance{{Name: "a", Instance: open("from a")}, {Name: "b", Instance: open("from b")}}}
+
+	res := queryScript(context.Background(), deps, "SELECT v FROM t;\n-- instance:b\nSELECT v FROM t;\nSELECT 1;\n-- instance: nope\nSELECT 1", Options{})
+	require.Len(t, res, 4)
+	assert.Equal(t, []string{"a", "b", "b", "nope"}, []string{res[0].Instance, res[1].Instance, res[2].Instance, res[3].Instance})
+	assert.Equal(t, [][]any{{"from b"}}, res[1].Values)
+	assert.Equal(t, "unknown instance: nope", res[3].Error)
+
+	qr, err := decodeForm(`{"queries":[{"instance":"b","statement":"SELECT 1"},{"statement":"SELECT 2"}]}`)
+	require.NoError(t, err)
+	assert.Equal(t, "-- instance:b\nSELECT 1\n\nSELECT 2", qr.Statement)
 }
